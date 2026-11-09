@@ -1,5 +1,6 @@
 using System.Net.Sockets;
 using AdvancedSharpAdbClient;
+using AdvancedSharpAdbClient.Exceptions;
 using AdvancedSharpAdbClient.Models;
 using AdvancedSharpAdbClient.Receivers;
 using Droidwart.Worker.Configuration;
@@ -22,17 +23,25 @@ public sealed class AdbGateway : IAdbGateway
         _client = new AdbClient(_options.ServerHost, _options.ServerPort);
     }
 
-    public async Task<ConnectionState> EnsureConnectedAsync(DeviceOptions device, CancellationToken cancellationToken)
+    public async Task<ConnectionResult> EnsureConnectedAsync(DeviceOptions device, CancellationToken cancellationToken)
     {
         var state = await GetStateAsync(device, cancellationToken);
         if (state is ConnectionState.Online or ConnectionState.Unauthorized)
         {
-            return state;
+            return new ConnectionResult(state);
         }
 
         _logger.LogInformation("Connecting {Device} ({Serial})…", device.Id, device.Serial);
-        var response = await WithServerAsync(() => _client.ConnectAsync(device.Host, device.Port, cancellationToken));
-        _logger.LogDebug("adb connect {Serial}: {Response}", device.Serial, response.Trim());
+
+        string response;
+        try
+        {
+            response = (await WithServerAsync(() => _client.ConnectAsync(device.Host, device.Port, cancellationToken))).Trim();
+        }
+        catch (AdbException ex)
+        {
+            response = ex.Message;
+        }
 
         // The server does not report a freshly connected device as "device" right away.
         for (var attempt = 0; attempt < 5; attempt++)
@@ -45,7 +54,14 @@ public sealed class AdbGateway : IAdbGateway
             }
         }
 
-        return state;
+        if (state is ConnectionState.Online)
+        {
+            _logger.LogInformation("Connected {Device}: {Response}", device.Id, response);
+            return new ConnectionResult(state);
+        }
+
+        _logger.LogWarning("Could not connect {Device} ({Serial}): {Response}", device.Id, device.Serial, response);
+        return new ConnectionResult(state, response);
     }
 
     public async Task<ShellResult> ShellAsync(DeviceOptions device, string command, CancellationToken cancellationToken)

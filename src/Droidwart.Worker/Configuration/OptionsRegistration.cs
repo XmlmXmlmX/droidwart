@@ -23,6 +23,12 @@ public static class OptionsRegistration
             .Validate(o => !string.IsNullOrWhiteSpace(o.DataDirectory), "Storage:DataDirectory is missing.")
             .ValidateOnStart();
 
+        services.AddOptions<GitHubOptions>()
+            .BindConfiguration(GitHubOptions.Section)
+            .Validate(o => Uri.TryCreate(o.ApiBaseUrl, UriKind.Absolute, out _) && o.ApiBaseUrl.EndsWith('/'),
+                "GitHub:ApiBaseUrl must be an absolute URL ending with '/'.")
+            .ValidateOnStart();
+
         // Devices and Apps live at the top level of the configuration.
         services.AddOptions<FleetOptions>()
             .Configure<IConfiguration>((options, configuration) => configuration.Bind(options))

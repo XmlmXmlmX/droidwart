@@ -1,13 +1,19 @@
 using System.Diagnostics;
 using Droidwart.Worker.Adb;
 using Droidwart.Worker.Configuration;
+using Droidwart.Worker.GitHub;
+using Droidwart.Worker.Updates;
 using Microsoft.Extensions.Options;
 
 namespace Droidwart.Worker.Inventory;
 
-/// <summary>Reads system info, the configured apps and all third-party apps for each device.</summary>
+/// <summary>
+/// Reads system info, the configured apps and all third-party apps for each device
+/// and compares the installed versions with the latest GitHub releases.
+/// </summary>
 public sealed class InventoryCollector(
     IAdbGateway adb,
+    GitHubReleaseClient gitHub,
     IOptionsMonitor<FleetOptions> fleet,
     TimeProvider time,
     ILogger<InventoryCollector> logger)
@@ -25,22 +31,30 @@ public sealed class InventoryCollector(
     public async Task<FleetInventory> CollectAsync(CancellationToken cancellationToken)
     {
         var options = fleet.CurrentValue;
-        var devices = new List<DeviceInventory>();
 
+        // One lookup per app, shared by all devices.
+        var releases = new Dictionary<string, ReleaseLookup>(StringComparer.Ordinal);
+        foreach (var app in options.Apps)
+        {
+            releases[app.Id] = await gitHub.GetLatestAsync(app.Repo, app.IncludePrereleases, cancellationToken);
+        }
+
+        var devices = new List<DeviceInventory>();
         foreach (var device in options.Devices)
         {
-            devices.Add(await CollectDeviceAsync(device, options, cancellationToken));
+            devices.Add(await CollectDeviceAsync(device, options, releases, cancellationToken));
         }
 
         return new FleetInventory(time.GetUtcNow(), devices);
     }
 
-    private async Task<DeviceInventory> CollectDeviceAsync(DeviceOptions device, FleetOptions options, CancellationToken cancellationToken)
+    private async Task<DeviceInventory> CollectDeviceAsync(
+        DeviceOptions device, FleetOptions options, IReadOnlyDictionary<string, ReleaseLookup> releases, CancellationToken cancellationToken)
     {
         using var activity = Telemetry.ActivitySource.StartActivity("inventory device");
         activity?.SetTag("droidwart.device", device.Id);
 
-        var result = await CollectDeviceCoreAsync(device, options, cancellationToken);
+        var result = await CollectDeviceCoreAsync(device, options, releases, cancellationToken);
 
         activity?.SetTag("droidwart.connection", result.Connection.ToString());
         if (result.Error is not null)
@@ -55,21 +69,22 @@ public sealed class InventoryCollector(
         return result;
     }
 
-    private async Task<DeviceInventory> CollectDeviceCoreAsync(DeviceOptions device, FleetOptions options, CancellationToken cancellationToken)
+    private async Task<DeviceInventory> CollectDeviceCoreAsync(
+        DeviceOptions device, FleetOptions options, IReadOnlyDictionary<string, ReleaseLookup> releases, CancellationToken cancellationToken)
     {
-        ConnectionState state;
+        ConnectionResult connection;
         try
         {
-            state = await adb.EnsureConnectedAsync(device, cancellationToken);
+            connection = await adb.EnsureConnectedAsync(device, cancellationToken);
         }
         catch (AdbServerUnavailableException ex)
         {
             return DeviceInventory.Failed(device.Id, device.Name, device.Serial, ConnectionState.Unreachable, ex.Message);
         }
 
-        if (state != ConnectionState.Online)
+        if (connection.State != ConnectionState.Online)
         {
-            var reason = state switch
+            var reason = connection.State switch
             {
                 ConnectionState.Unauthorized =>
                     "ADB key not authorized. Authorize the ADB server's adbkey.pub on the device.",
@@ -77,26 +92,33 @@ public sealed class InventoryCollector(
                     "Device reports as offline. Restart ADB over TCP on the device or reboot it.",
                 _ => "Device not reachable. Check the IP, port 5555 and the Magisk boot script.",
             };
-            return DeviceInventory.Failed(device.Id, device.Name, device.Serial, state, reason);
+
+            if (connection.Detail is not null)
+            {
+                reason += $" ADB server: {connection.Detail}";
+            }
+
+            return DeviceInventory.Failed(device.Id, device.Name, device.Serial, connection.State, reason);
         }
 
         try
         {
+            var warnings = new List<string>();
             var info = await ReadDeviceInfoAsync(device, cancellationToken);
-            var thirdParty = await ReadThirdPartyPackagesAsync(device, cancellationToken);
+            var thirdParty = await ReadThirdPartyPackagesAsync(device, warnings, cancellationToken);
 
             var apps = new List<AppInventoryEntry>();
             foreach (var app in options.AppsFor(device))
             {
-                apps.Add(await CollectAppAsync(device, app, info, cancellationToken));
+                apps.Add(await CollectAppAsync(device, app, info, releases[app.Id], cancellationToken));
             }
 
-            return new DeviceInventory(device.Id, device.Name, device.Serial, state, null, info, apps, thirdParty);
+            return new DeviceInventory(device.Id, device.Name, device.Serial, connection.State, null, info, apps, thirdParty, warnings);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             logger.LogWarning(ex, "Inventory for {Device} is incomplete", device.Id);
-            return DeviceInventory.Failed(device.Id, device.Name, device.Serial, state, $"Failed to read device: {ex.Message}");
+            return DeviceInventory.Failed(device.Id, device.Name, device.Serial, connection.State, $"Failed to read device: {ex.Message}");
         }
     }
 
@@ -121,36 +143,42 @@ public sealed class InventoryCollector(
             abiList.Length > 0 ? abiList : new[] { primaryAbi });
     }
 
-    private async Task<List<InstalledPackage>> ReadThirdPartyPackagesAsync(DeviceOptions device, CancellationToken cancellationToken)
+    private async Task<List<InstalledPackage>> ReadThirdPartyPackagesAsync(
+        DeviceOptions device, List<string> warnings, CancellationToken cancellationToken)
     {
         var result = await adb.ShellAsync(device, "pm list packages -3 -i", cancellationToken);
+        if (!result.Success)
+        {
+            warnings.Add($"'pm list packages' failed (exit code {result.ExitCode?.ToString() ?? "unknown"}): {result.Output}");
+        }
+
         return AndroidParsers.ParsePmListPackages(result.Output);
     }
 
     private async Task<AppInventoryEntry> CollectAppAsync(
-        DeviceOptions device, AppOptions app, DeviceInfo info, CancellationToken cancellationToken)
+        DeviceOptions device, AppOptions app, DeviceInfo info, ReleaseLookup release, CancellationToken cancellationToken)
     {
-        var configured = FleetOptions.ResolvePackage(app, device);
+        var variants = FleetOptions.ResolveVariants(app, device);
         var notes = new List<string>();
-
-        if (string.IsNullOrWhiteSpace(configured))
-        {
-            notes.Add("No package name configured. Pick the matching entry from 'Other installed apps'.");
-            return new AppInventoryEntry(app.Id, app.Name, null, AppStatus.PackageUnknown, null, null, notes);
-        }
 
         // Package names are restricted to [A-Za-z0-9_.] by FleetOptionsValidator,
         // so inserting them into the shell command is safe.
+        AppVariant? installedVariant = null;
         PackageDetails? found = null;
-        foreach (var candidate in new[] { configured }.Concat(app.AlternativePackages))
+        foreach (var variant in variants)
         {
-            var dump = await adb.ShellAsync(device, $"dumpsys package {candidate}", cancellationToken);
-            found = AndroidParsers.ParseDumpsysPackage(dump.Output, candidate);
+            var dump = await adb.ShellAsync(device, $"dumpsys package {variant.Package}", cancellationToken);
+            found = AndroidParsers.ParseDumpsysPackage(dump.Output, variant.Package);
             if (found is not null)
             {
+                installedVariant = variant;
                 break;
             }
         }
+
+        // Fresh installs use the default (first) variant.
+        var effectiveVariant = installedVariant ?? variants[0];
+        var update = UpdateEvaluator.Evaluate(effectiveVariant, info.SupportedAbis, found, release);
 
         if (found is null)
         {
@@ -159,12 +187,13 @@ public sealed class InventoryCollector(
                 notes.Add(app.NotInstalledHint);
             }
 
-            return new AppInventoryEntry(app.Id, app.Name, configured, AppStatus.NotInstalled, null, null, notes);
+            return new AppInventoryEntry(app.Id, app.Name, app.Policy, effectiveVariant.Package, AppStatus.NotInstalled,
+                null, null, update, notes);
         }
 
-        if (!string.Equals(found.PackageName, configured, StringComparison.Ordinal))
+        if (!ReferenceEquals(effectiveVariant, variants[0]))
         {
-            notes.Add($"Installed variant is {found.PackageName} instead of {configured}. The asset selection must match it.");
+            notes.Add($"Installed variant: {found.PackageName}.");
         }
 
         if (app.RequireInstallSource is not null && InstallerNames.IsStore(found.Installer))
@@ -173,14 +202,10 @@ public sealed class InventoryCollector(
                       $"Updates from GitHub ({app.Repo}) will likely fail due to a different signature.");
         }
 
-        if (info.Sdk is { } sdk && found.TargetSdk is { } target && target > sdk)
-        {
-            notes.Add($"targetSdk {target} is higher than the device SDK {sdk}.");
-        }
-
         var launch = app.LaunchComponent ?? await ResolveLaunchComponentAsync(device, found.PackageName, cancellationToken);
 
-        return new AppInventoryEntry(app.Id, app.Name, configured, AppStatus.Installed, found, launch, notes);
+        return new AppInventoryEntry(app.Id, app.Name, app.Policy, effectiveVariant.Package, AppStatus.Installed,
+            found, launch, update, notes);
     }
 
     private async Task<string?> ResolveLaunchComponentAsync(DeviceOptions device, string package, CancellationToken cancellationToken)

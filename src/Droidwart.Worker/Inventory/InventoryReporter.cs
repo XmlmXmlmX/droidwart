@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Droidwart.Worker.Configuration;
+using Droidwart.Worker.Updates;
 using Microsoft.Extensions.Options;
 
 namespace Droidwart.Worker.Inventory;
@@ -36,32 +37,23 @@ public sealed class InventoryReporter(IOptions<StorageOptions> storage, ILogger<
                     string.Join(", ", info.SupportedAbis), info.Is64Bit ? "64-bit" : "32-bit");
             }
 
+            foreach (var warning in device.Warnings)
+            {
+                logger.LogWarning("  ! {Warning}", warning);
+            }
+
             foreach (var app in device.Apps)
             {
-                if (app.Package is { } p)
-                {
-                    logger.LogInformation("  {App,-14} {Package,-44} {Version} ({Code}) minSdk {MinSdk}, source: {Installer}",
-                        app.AppId, p.PackageName, p.VersionName, p.VersionCode, p.MinSdk, InstallerNames.Describe(p.Installer));
-                    if (app.LaunchComponent is not null)
-                    {
-                        logger.LogInformation("  {Blank,-14} Launch component: {Launch}", "", app.LaunchComponent);
-                    }
-                }
-                else
-                {
-                    logger.LogInformation("  {App,-14} {Package,-44} {Status}",
-                        app.AppId, app.ConfiguredPackage ?? "(no package name)", app.Status);
-                }
-
-                foreach (var note in app.Notes)
-                {
-                    logger.LogWarning("  {Blank,-14} ! {Note}", "", note);
-                }
+                LogApp(app);
             }
 
             var managed = device.Apps.Select(a => a.Package?.PackageName).OfType<string>().ToHashSet(StringComparer.Ordinal);
             var others = device.ThirdPartyPackages.Where(p => !managed.Contains(p.PackageName)).ToList();
-            if (others.Count > 0)
+            if (others.Count == 0)
+            {
+                logger.LogInformation("  Other installed apps: none");
+            }
+            else
             {
                 logger.LogInformation("  Other installed apps ({Count}):", others.Count);
                 foreach (var package in others)
@@ -69,6 +61,54 @@ public sealed class InventoryReporter(IOptions<StorageOptions> storage, ILogger<
                     logger.LogInformation("    {Package,-50} source: {Installer}", package.PackageName, InstallerNames.Describe(package.Installer));
                 }
             }
+        }
+    }
+
+    private void LogApp(AppInventoryEntry app)
+    {
+        if (app.Package is { } p)
+        {
+            logger.LogInformation("  {App,-14} {Package,-44} {Version} ({Code}), source: {Installer}",
+                app.AppId, p.PackageName, p.VersionName, p.VersionCode, InstallerNames.Describe(p.Installer));
+        }
+        else
+        {
+            logger.LogInformation("  {App,-14} {Package,-44} not installed", app.AppId, app.VariantPackage);
+        }
+
+        var update = app.Update;
+        var summary = update.State switch
+        {
+            UpdateState.UpToDate => $"up to date ({update.LatestTag})",
+            UpdateState.UpdateAvailable => $"UPDATE AVAILABLE: {update.LatestTag}",
+            UpdateState.NotInstalled => $"installable: {update.LatestTag}",
+            UpdateState.InstalledNewer => $"installed version is newer than {update.LatestTag}",
+            UpdateState.Unknown => $"latest {update.LatestTag}, comparison not possible",
+            _ => "release check failed",
+        };
+
+        if (update.AssetName is not null)
+        {
+            logger.LogInformation("  {Blank,-14} → {Summary}, asset {Asset}, policy {Policy}", "", summary, update.AssetName, app.Policy);
+        }
+        else
+        {
+            logger.LogInformation("  {Blank,-14} → {Summary}, policy {Policy}", "", summary, app.Policy);
+        }
+
+        if (update.Problem is not null)
+        {
+            logger.LogWarning("  {Blank,-14} ! {Problem}", "", update.Problem);
+        }
+
+        if (app.LaunchComponent is not null)
+        {
+            logger.LogInformation("  {Blank,-14} launch component: {Launch}", "", app.LaunchComponent);
+        }
+
+        foreach (var note in app.Notes)
+        {
+            logger.LogWarning("  {Blank,-14} ! {Note}", "", note);
         }
     }
 

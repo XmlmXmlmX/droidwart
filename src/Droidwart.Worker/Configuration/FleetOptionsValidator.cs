@@ -73,23 +73,28 @@ public sealed partial class FleetOptionsValidator : IValidateOptions<FleetOption
                 errors.Add($"{prefix}: id must consist of lowercase letters, digits and '-'.");
             if (!RepoRegex().IsMatch(app.Repo))
                 errors.Add($"{prefix}: repo '{app.Repo}' must use the format 'owner/name'.");
-            if (!string.IsNullOrEmpty(app.Package) && !IsValidPackageName(app.Package))
-                errors.Add($"{prefix}: package name '{app.Package}' is invalid.");
+            if (app.Variants.Count == 0)
+                errors.Add($"{prefix}: at least one variant (package and asset pattern) is required.");
 
-            foreach (var alternative in app.AlternativePackages.Where(p => !IsValidPackageName(p)))
-                errors.Add($"{prefix}: alternative package name '{alternative}' is invalid.");
+            errors.AddRange(Duplicates(app.Variants.Select(v => v.Package), $"{prefix}: package"));
+
+            foreach (var variant in app.Variants)
+            {
+                if (!IsValidPackageName(variant.Package))
+                    errors.Add($"{prefix}: package name '{variant.Package}' is invalid.");
+
+                try
+                {
+                    _ = new Regex(variant.AssetPattern.Replace("{abi}", "arm64-v8a", StringComparison.Ordinal));
+                }
+                catch (ArgumentException ex)
+                {
+                    errors.Add($"{prefix}: asset pattern for '{variant.Package}' is not a valid regular expression ({ex.Message}).");
+                }
+            }
 
             foreach (var deviceId in app.Devices.Where(id => !deviceIds.Contains(id)))
                 errors.Add($"{prefix}: references unknown device '{deviceId}'.");
-
-            try
-            {
-                _ = new Regex(app.AssetPattern.Replace("{abi}", "arm64-v8a", StringComparison.Ordinal));
-            }
-            catch (ArgumentException ex)
-            {
-                errors.Add($"{prefix}: AssetPattern is not a valid regular expression ({ex.Message}).");
-            }
         }
 
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);

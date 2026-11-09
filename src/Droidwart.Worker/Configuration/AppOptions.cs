@@ -12,6 +12,18 @@ public enum UpdatePolicy
     Auto,
 }
 
+/// <summary>
+/// One flavor of an app: a package name and the release asset that belongs to it,
+/// e.g. "full" vs. "minimal" for the Home Assistant Companion app.
+/// </summary>
+public sealed class AppVariant
+{
+    public string Package { get; set; } = "";
+
+    /// <summary>Regex for the release asset. The placeholder {abi} is replaced with each supported ABI of the device.</summary>
+    public string AssetPattern { get; set; } = @"\.apk$";
+}
+
 public sealed class AppOptions
 {
     /// <summary>Technical id, e.g. "ha-companion". Becomes part of the MQTT topics later.</summary>
@@ -22,14 +34,11 @@ public sealed class AppOptions
     /// <summary>GitHub repository in the format "owner/name".</summary>
     public string Repo { get; set; } = "";
 
-    /// <summary>Expected package name. Leave empty if unknown; the inventory then lists candidates.</summary>
-    public string? Package { get; set; }
-
-    /// <summary>Other package names of the same app (e.g. flavors such as "minimal" or "fdroid").</summary>
-    public List<string> AlternativePackages { get; set; } = new();
-
-    /// <summary>Regex for the release asset. The placeholder {abi} is replaced per device.</summary>
-    public string AssetPattern { get; set; } = @"\.apk$";
+    /// <summary>
+    /// Known variants. The first one is the default and is used for fresh installs;
+    /// for installed apps the variant matching the installed package is used.
+    /// </summary>
+    public List<AppVariant> Variants { get; set; } = new();
 
     public bool IncludePrereleases { get; set; }
 

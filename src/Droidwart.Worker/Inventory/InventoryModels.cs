@@ -1,4 +1,6 @@
 using Droidwart.Worker.Adb;
+using Droidwart.Worker.Configuration;
+using Droidwart.Worker.Updates;
 
 namespace Droidwart.Worker.Inventory;
 
@@ -12,10 +14,11 @@ public sealed record DeviceInventory(
     string? Error,
     DeviceInfo? Info,
     IReadOnlyList<AppInventoryEntry> Apps,
-    IReadOnlyList<InstalledPackage> ThirdPartyPackages)
+    IReadOnlyList<InstalledPackage> ThirdPartyPackages,
+    IReadOnlyList<string> Warnings)
 {
     public static DeviceInventory Failed(string id, string name, string serial, ConnectionState state, string error) =>
-        new(id, name, serial, state, error, null, [], []);
+        new(id, name, serial, state, error, null, [], [], []);
 }
 
 public sealed record DeviceInfo(
@@ -33,16 +36,17 @@ public enum AppStatus
 {
     Installed,
     NotInstalled,
-    PackageUnknown,
 }
 
 public sealed record AppInventoryEntry(
     string AppId,
     string Name,
-    string? ConfiguredPackage,
+    UpdatePolicy Policy,
+    string VariantPackage,
     AppStatus Status,
     PackageDetails? Package,
     string? LaunchComponent,
+    UpdateCheck Update,
     IReadOnlyList<string> Notes);
 
 public sealed record PackageDetails(
