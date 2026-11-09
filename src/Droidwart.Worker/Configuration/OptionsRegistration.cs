@@ -16,6 +16,7 @@ public static class OptionsRegistration
         services.AddOptions<ScheduleOptions>()
             .BindConfiguration(ScheduleOptions.Section)
             .Validate(o => o.InventoryInterval >= TimeSpan.FromMinutes(1), "Schedule:InventoryInterval must be at least 1 minute.")
+            .Validate(o => o.ConnectionCheckInterval >= TimeSpan.FromSeconds(10), "Schedule:ConnectionCheckInterval must be at least 10 seconds.")
             .ValidateOnStart();
 
         services.AddOptions<StorageOptions>()
@@ -29,6 +30,13 @@ public static class OptionsRegistration
                 "GitHub:ApiBaseUrl must be an absolute URL ending with '/'.")
             .ValidateOnStart();
 
+        services.AddOptions<MqttOptions>()
+            .BindConfiguration(MqttOptions.Section)
+            .Validate(o => o.Port is > 0 and <= 65535, "Mqtt:Port is invalid.")
+            .Validate(o => IsValidTopicSegment(o.BaseTopic), "Mqtt:BaseTopic must not be empty or contain '/', '+' or '#'.")
+            .Validate(o => IsValidTopicSegment(o.DiscoveryPrefix), "Mqtt:DiscoveryPrefix must not be empty or contain '/', '+' or '#'.")
+            .ValidateOnStart();
+
         // Devices and Apps live at the top level of the configuration.
         services.AddOptions<FleetOptions>()
             .Configure<IConfiguration>((options, configuration) => configuration.Bind(options))
@@ -37,4 +45,7 @@ public static class OptionsRegistration
 
         return services;
     }
+
+    private static bool IsValidTopicSegment(string value) =>
+        !string.IsNullOrWhiteSpace(value) && value.IndexOfAny(['/', '+', '#']) < 0;
 }

@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using Droidwart.Worker.Configuration;
 using Droidwart.Worker.GitHub;
 using Droidwart.Worker.Inventory;
+using Droidwart.Worker.Mqtt;
 using Droidwart.Worker.Services;
 using Microsoft.Extensions.Options;
 
@@ -36,7 +37,15 @@ builder.Services.AddHttpClient(GitHubReleaseClient.HttpClientName, (services, cl
 builder.Services.AddSingleton<GitHubReleaseClient>();
 builder.Services.AddSingleton<InventoryCollector>();
 builder.Services.AddSingleton<InventoryReporter>();
+builder.Services.AddSingleton<InventoryTrigger>();
+
+// MQTT connection is a singleton and a hosted service at the same time (reconnect loop).
+builder.Services.AddSingleton<MqttConnection>();
+builder.Services.AddHostedService(services => services.GetRequiredService<MqttConnection>());
+builder.Services.AddSingleton<HomeAssistantPublisher>();
+
 builder.Services.AddHostedService<InventoryWorker>();
+builder.Services.AddHostedService<ConnectionMonitorWorker>();
 
 var host = builder.Build();
 await host.RunAsync();

@@ -25,13 +25,14 @@ public sealed record UpdateCheck(
     string? AssetUrl,
     long? AssetSize,
     string? AssetDigest,
+    string? ReleaseNotes,
     string? Problem)
 {
     /// <summary>True if Droidwart could install or update the app (an asset was found).</summary>
     public bool Installable => AssetUrl is not null && State is UpdateState.UpdateAvailable or UpdateState.NotInstalled;
 
     public static UpdateCheck Failed(string problem) =>
-        new(UpdateState.CheckFailed, null, null, null, null, null, null, null, null, problem);
+        new(UpdateState.CheckFailed, null, null, null, null, null, null, null, null, null, problem);
 }
 
 public static class UpdateEvaluator
@@ -77,6 +78,7 @@ public static class UpdateEvaluator
             asset?.BrowserDownloadUrl,
             asset?.Size,
             asset?.Digest,
+            release.Body,
             problem);
     }
 }

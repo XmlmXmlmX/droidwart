@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Sockets;
 using AdvancedSharpAdbClient;
 using AdvancedSharpAdbClient.Exceptions;
@@ -15,6 +16,7 @@ public sealed class AdbGateway : IAdbGateway
     private readonly AdbClient _client;
     private readonly AdbOptions _options;
     private readonly ILogger<AdbGateway> _logger;
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _connectLocks = new(StringComparer.Ordinal);
 
     public AdbGateway(IOptions<AdbOptions> options, ILogger<AdbGateway> logger)
     {
@@ -24,6 +26,21 @@ public sealed class AdbGateway : IAdbGateway
     }
 
     public async Task<ConnectionResult> EnsureConnectedAsync(DeviceOptions device, CancellationToken cancellationToken)
+    {
+        // Inventory and connection monitor may connect the same device at the same time.
+        var connectLock = _connectLocks.GetOrAdd(device.Id, _ => new SemaphoreSlim(1, 1));
+        await connectLock.WaitAsync(cancellationToken);
+        try
+        {
+            return await EnsureConnectedCoreAsync(device, cancellationToken);
+        }
+        finally
+        {
+            connectLock.Release();
+        }
+    }
+
+    private async Task<ConnectionResult> EnsureConnectedCoreAsync(DeviceOptions device, CancellationToken cancellationToken)
     {
         var state = await GetStateAsync(device, cancellationToken);
         if (state is ConnectionState.Online or ConnectionState.Unauthorized)

@@ -10,6 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="11.0.0-*" /> <!-- RC until the GA release, then pin to 11.0.0 -->
     <!-- Pin to the resolved version after the first restore (dotnet list package) -->
     <PackageReference Include="AdvancedSharpAdbClient" Version="3.*" />
+    <PackageReference Include="MQTTnet" Version="5.2.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -33,10 +33,20 @@ else
         .WithEnvironment("Adb__ServerPort", parts.Length > 1 ? parts[1] : "5037");
 }
 
-// From phase 3: MQTT credentials as Aspire parameters (stored in the AppHost user secrets).
-// var mqttPassword = builder.AddParameter("mqtt-password", secret: true);
-// worker.WithEnvironment("Mqtt__Host", "192.168.178.157")
-//       .WithEnvironment("Mqtt__Username", "droidwart")
-//       .WithEnvironment("Mqtt__Password", mqttPassword);
+// MQTT: only enabled if a broker is configured, e.g.
+//   dotnet user-secrets set "Droidwart:MqttHost" "192.168.178.157" --project src/Droidwart.AppHost
+//   dotnet user-secrets set "Parameters:mqtt-password" "<password>" --project src/Droidwart.AppHost
+// Use a separate MQTT client id for development, otherwise the broker disconnects the production instance.
+var mqttHost = builder.Configuration["Droidwart:MqttHost"];
+if (!string.IsNullOrWhiteSpace(mqttHost))
+{
+    var mqttPassword = builder.AddParameter("mqtt-password", secret: true);
+    worker
+        .WithEnvironment("Mqtt__Host", mqttHost)
+        .WithEnvironment("Mqtt__Username", "droidwart-mqtt")
+        .WithEnvironment("Mqtt__Password", mqttPassword)
+        .WithEnvironment("Mqtt__ClientId", "droidwart-dev")
+        .WithEnvironment("Mqtt__BaseTopic", "droidwart-dev");
+}
 
 builder.Build().Run();

@@ -1,16 +1,20 @@
 using Droidwart.Worker.Configuration;
 using Droidwart.Worker.Inventory;
+using Droidwart.Worker.Mqtt;
 using Microsoft.Extensions.Options;
 
 namespace Droidwart.Worker.Services;
 
 /// <summary>
-/// Phase 1: reads the inventory at startup and then every Schedule:InventoryInterval.
+/// Reads the inventory at startup, then every Schedule:InventoryInterval or whenever a run is requested
+/// (e.g. a device came back online), and publishes the result to Home Assistant.
 /// With --RunOnce=true it performs a single run and stops the application.
 /// </summary>
 public sealed class InventoryWorker(
     InventoryCollector collector,
     InventoryReporter reporter,
+    HomeAssistantPublisher publisher,
+    InventoryTrigger trigger,
     IOptions<ScheduleOptions> schedule,
     IConfiguration configuration,
     IHostApplicationLifetime lifetime,
@@ -26,9 +30,14 @@ public sealed class InventoryWorker(
             return;
         }
 
-        using var timer = new PeriodicTimer(schedule.Value.InventoryInterval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
+            var requested = await trigger.WaitAsync(schedule.Value.InventoryInterval, stoppingToken);
+            if (requested)
+            {
+                logger.LogInformation("Inventory run requested");
+            }
+
             await RunInventoryAsync(stoppingToken);
         }
     }
@@ -44,6 +53,7 @@ public sealed class InventoryWorker(
             var inventory = await collector.CollectAsync(stoppingToken);
             reporter.Log(inventory);
             await reporter.SaveAsync(inventory, stoppingToken);
+            await publisher.PublishInventoryAsync(inventory, stoppingToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
