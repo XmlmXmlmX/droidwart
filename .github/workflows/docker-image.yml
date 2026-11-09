@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 11.0.x
+      - name: Build .NET solution
+        run: dotnet build Droidwart.slnx --configuration Release
       - name: Run tests
         run: dotnet test Droidwart.slnx --configuration Release
       - name: Build Droidwart image
@@ -82,8 +84,25 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Determine Docker image version
+        id: image-version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref, '-') }}
+          body: |
+            ### Docker images
+
+            Published to GitHub Container Registry:
+
+            - [Droidwart](https://github.com/XmlmXmlmX/droidwart/pkgs/container/droidwart): `ghcr.io/xmlmxmlmx/droidwart:${{ steps.image-version.outputs.value }}`
+            - [ADB server](https://github.com/XmlmXmlmX/droidwart/pkgs/container/droidwart-adb-server): `ghcr.io/xmlmxmlmx/droidwart-adb-server:${{ steps.image-version.outputs.value }}`
+
+            Pull them with:
+
+            ```sh
+            docker pull ghcr.io/xmlmxmlmx/droidwart:${{ steps.image-version.outputs.value }}
+            docker pull ghcr.io/xmlmxmlmx/droidwart-adb-server:${{ steps.image-version.outputs.value }}
+            ```
