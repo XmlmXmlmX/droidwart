@@ -1,0 +1,9 @@
+**/bin
+**/obj
+**/data
+.git
+.vs
+.idea
+tests
+deploy
+docker

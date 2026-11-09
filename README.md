@@ -4,28 +4,28 @@ Self-hosted .NET worker that keeps rooted Android devices up to date via ADB. Tr
 and exposes app updates as native Home Assistant update entities over MQTT. Built for old phones
 repurposed as CCTV cameras.
 
-Stand: **Phase 1 – Inventar** (Geräteinfos, installierte Versionen, Installationsquelle, Start-Komponenten).
+Status: **Phase 1 – Inventory** (device info, installed versions, install source, launch components).
 
-## Voraussetzungen
+## Requirements
 
 - .NET 11 SDK
-- Docker Desktop (für den ADB-Server-Container in der Aspire-Entwicklungsumgebung)
+- Docker Desktop (for the ADB server container in the Aspire development environment)
 - Optional: Aspire CLI (`aspire run`)
 
-## Entwicklung mit Aspire
+## Development with Aspire
 
     aspire run
-    # oder: dotnet run --project src/Droidwart.AppHost
+    # or: dotnet run --project src/Droidwart.AppHost
 
-Das Aspire-Dashboard zeigt Worker, ADB-Server-Container, Logs, Traces und Metriken.
-Der ADB-Server-Container hat ein eigenes Schlüsselpaar (Volume `droidwart-dev-adb-keys`), das einmalig
-auf den Phones freigegeben werden muss. Alternativ einen bestehenden ADB-Server verwenden:
+The Aspire dashboard shows the worker, the ADB server container, logs, traces and metrics.
+The ADB server container has its own key pair (volume `droidwart-dev-adb-keys`), which must be
+authorized once on the phones. Alternatively, use an existing ADB server:
 
     dotnet user-secrets set "Droidwart:ExternalAdbServer" "<host>:5037" --project src/Droidwart.AppHost
 
-Inventar-Ergebnis: Log im Dashboard und `data/inventory.json` im Repository-Verzeichnis.
+Inventory output: logs in the dashboard and `data/inventory.json` in the repository directory.
 
-## Ohne Aspire
+## Without Aspire
 
     cp src/Droidwart.Worker/appsettings.Development.json.example src/Droidwart.Worker/appsettings.Development.json
     dotnet run --project src/Droidwart.Worker -- --RunOnce=true
@@ -39,17 +39,17 @@ Inventar-Ergebnis: Log im Dashboard und `data/inventory.json` im Repository-Verz
     docker build -t ghcr.io/xmlmxmlmx/droidwart:dev .
     docker build -t ghcr.io/xmlmxmlmx/droidwart-adb-server:dev docker/adb-server
 
-Deployment als Portainer-Stack: `deploy/docker-compose.yml`.
+Deployment as a Portainer stack: `deploy/docker-compose.yml`.
 
-## Aufbau
+## Structure
 
-- `src/Droidwart.AppHost` – Aspire-AppHost für die lokale Entwicklung
-- `src/Droidwart.ServiceDefaults` – OpenTelemetry und HTTP-Resilienz
-- `src/Droidwart.Worker` – Worker-Service (.NET 11)
-- `tests/Droidwart.Tests` – Unit-Tests (xUnit v3)
-- `docker/adb-server` – ADB-Server-Image (Debian, adb, tini)
-- `deploy/docker-compose.yml` – Portainer-Stack
+- `src/Droidwart.AppHost` – Aspire AppHost for local development
+- `src/Droidwart.ServiceDefaults` – OpenTelemetry and HTTP resilience
+- `src/Droidwart.Worker` – worker service (.NET 11)
+- `tests/Droidwart.Tests` – unit tests (xUnit v3)
+- `docker/adb-server` – ADB server image (Debian, adb, tini)
+- `deploy/docker-compose.yml` – Portainer stack
 
-## Lizenz
+## License
 
 MIT
