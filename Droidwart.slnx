@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Droidwart.AppHost/Droidwart.AppHost.csproj" />
+    <Project Path="src/Droidwart.ServiceDefaults/Droidwart.ServiceDefaults.csproj" />
+    <Project Path="src/Droidwart.Worker/Droidwart.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Droidwart.Tests/Droidwart.Tests.csproj" />
+  </Folder>
+</Solution>

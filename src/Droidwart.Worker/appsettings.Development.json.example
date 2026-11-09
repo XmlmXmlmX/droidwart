@@ -1,0 +1,13 @@
+{
+  "Adb": {
+    "ServerHost": "127.0.0.1"
+  },
+  "Schedule": {
+    "InventoryInterval": "00:05:00"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Droidwart": "Debug"
+    }
+  }
+}
