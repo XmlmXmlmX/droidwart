@@ -39,6 +39,10 @@ Inventory output: logs in the dashboard and `data/inventory.json` in the reposit
     docker build -t ghcr.io/xmlmxmlmx/droidwart:dev .
     docker build -t ghcr.io/xmlmxmlmx/droidwart-adb-server:dev docker/adb-server
 
+Pull requests run the tests and build both images. To publish versioned images and create a
+GitHub Release with generated release notes, push a version tag such as `v1.2.3`. The images
+are published to GHCR as `1.2.3` and `latest`.
+
 Deployment as a Portainer stack: `deploy/docker-compose.yml`.
 
 ## Structure
