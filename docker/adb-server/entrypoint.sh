@@ -1,11 +1,10 @@
 #!/bin/sh
-# Startet den ADB-Server im Vordergrund (lauscht auf allen Interfaces, Port 5037)
-# und verbindet optional die Geräte aus ADB_CONNECT regelmäßig neu,
-# z. B. nach einem Neustart eines Phones.
+# Starts the ADB server in the foreground (listening on all interfaces, port 5037)
+# and optionally reconnects the devices listed in ADB_CONNECT, e.g. after a phone reboots.
 #
-# Umgebungsvariablen:
-#   ADB_CONNECT             Kommagetrennte Liste, z. B. "192.168.178.164:5555,192.168.178.160:5555"
-#   ADB_RECONNECT_INTERVAL  Sekunden zwischen den Verbindungsversuchen (Standard: 60)
+# Environment variables:
+#   ADB_CONNECT             Comma-separated list, e.g. "192.168.178.164:5555,192.168.178.160:5555"
+#   ADB_RECONNECT_INTERVAL  Seconds between connection attempts (default: 60)
 set -eu
 
 PORT=5037
@@ -13,14 +12,14 @@ PORT=5037
 adb -a -P "$PORT" server nodaemon &
 SERVER_PID=$!
 
-# Kurz warten, bis der Server Verbindungen annimmt
+# Give the server a moment to accept connections
 sleep 2
 
 if [ -n "${ADB_CONNECT:-}" ]; then
   (
     while kill -0 "$SERVER_PID" 2>/dev/null; do
       for dev in $(echo "$ADB_CONNECT" | tr ',' ' '); do
-        # "already connected" ist kein Fehler; Ausgabe nur bei Statuswechseln interessant
+        # "already connected" is not an error; only state changes are worth logging
         adb -P "$PORT" connect "$dev" 2>&1 | grep -v "already connected" || true
       done
       sleep "${ADB_RECONNECT_INTERVAL:-60}"
@@ -28,5 +27,5 @@ if [ -n "${ADB_CONNECT:-}" ]; then
   ) &
 fi
 
-# Endet der Server, endet der Container -> Docker startet ihn per restart-Policy neu
+# If the server exits, the container exits -> Docker restarts it via the restart policy
 wait "$SERVER_PID"

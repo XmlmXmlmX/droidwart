@@ -8,7 +8,7 @@
         "DOTNET_ENVIRONMENT": "Development"
       }
     },
-    "Droidwart.Worker (einmalig)": {
+    "Droidwart.Worker (run once)": {
       "commandName": "Project",
       "commandLineArgs": "--RunOnce=true",
       "environmentVariables": {

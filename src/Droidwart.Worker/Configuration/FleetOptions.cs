@@ -1,6 +1,6 @@
 namespace Droidwart.Worker.Configuration;
 
-/// <summary>Geräte und Apps (Abschnitte "Devices" und "Apps" auf oberster Ebene).</summary>
+/// <summary>Devices and apps (top-level sections "Devices" and "Apps").</summary>
 public sealed class FleetOptions
 {
     public List<DeviceOptions> Devices { get; set; } = new();

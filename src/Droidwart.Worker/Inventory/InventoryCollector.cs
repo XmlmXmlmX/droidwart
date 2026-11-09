@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace Droidwart.Worker.Inventory;
 
-/// <summary>Liest pro Gerät Systeminfos, die konfigurierten Apps und alle Drittanbieter-Apps.</summary>
+/// <summary>Reads system info, the configured apps and all third-party apps for each device.</summary>
 public sealed class InventoryCollector(
     IAdbGateway adb,
     IOptionsMonitor<FleetOptions> fleet,
@@ -72,10 +72,10 @@ public sealed class InventoryCollector(
             var reason = state switch
             {
                 ConnectionState.Unauthorized =>
-                    "ADB-Schlüssel nicht autorisiert. adbkey.pub des ADB-Servers auf dem Gerät freigeben.",
+                    "ADB key not authorized. Authorize the ADB server's adbkey.pub on the device.",
                 ConnectionState.Offline =>
-                    "Gerät meldet sich als offline. ADB über TCP auf dem Gerät neu starten oder Gerät neu booten.",
-                _ => "Gerät nicht erreichbar. IP, Port 5555 und das Magisk-Boot-Skript prüfen.",
+                    "Device reports as offline. Restart ADB over TCP on the device or reboot it.",
+                _ => "Device not reachable. Check the IP, port 5555 and the Magisk boot script.",
             };
             return DeviceInventory.Failed(device.Id, device.Name, device.Serial, state, reason);
         }
@@ -95,8 +95,8 @@ public sealed class InventoryCollector(
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "Inventar für {Device} unvollständig", device.Id);
-            return DeviceInventory.Failed(device.Id, device.Name, device.Serial, state, $"Fehler beim Auslesen: {ex.Message}");
+            logger.LogWarning(ex, "Inventory for {Device} is incomplete", device.Id);
+            return DeviceInventory.Failed(device.Id, device.Name, device.Serial, state, $"Failed to read device: {ex.Message}");
         }
     }
 
@@ -135,12 +135,12 @@ public sealed class InventoryCollector(
 
         if (string.IsNullOrWhiteSpace(configured))
         {
-            notes.Add("Kein Paketname konfiguriert. Den passenden Eintrag aus 'Weitere installierte Apps' übernehmen.");
+            notes.Add("No package name configured. Pick the matching entry from 'Other installed apps'.");
             return new AppInventoryEntry(app.Id, app.Name, null, AppStatus.PackageUnknown, null, null, notes);
         }
 
-        // Paketnamen sind durch den FleetOptionsValidator auf [A-Za-z0-9_.] beschränkt,
-        // daher ist das Einsetzen in den Shell-Befehl unkritisch.
+        // Package names are restricted to [A-Za-z0-9_.] by FleetOptionsValidator,
+        // so inserting them into the shell command is safe.
         PackageDetails? found = null;
         foreach (var candidate in new[] { configured }.Concat(app.AlternativePackages))
         {
@@ -164,18 +164,18 @@ public sealed class InventoryCollector(
 
         if (!string.Equals(found.PackageName, configured, StringComparison.Ordinal))
         {
-            notes.Add($"Installiert ist die Variante {found.PackageName} statt {configured}. Asset-Auswahl muss dazu passen.");
+            notes.Add($"Installed variant is {found.PackageName} instead of {configured}. The asset selection must match it.");
         }
 
         if (app.RequireInstallSource is not null && InstallerNames.IsStore(found.Installer))
         {
-            notes.Add($"Installiert über {InstallerNames.Describe(found.Installer)}. " +
-                      $"Updates aus GitHub ({app.Repo}) scheitern vermutlich an einer anderen Signatur.");
+            notes.Add($"Installed via {InstallerNames.Describe(found.Installer)}. " +
+                      $"Updates from GitHub ({app.Repo}) will likely fail due to a different signature.");
         }
 
         if (info.Sdk is { } sdk && found.TargetSdk is { } target && target > sdk)
         {
-            notes.Add($"targetSdk {target} liegt über dem Geräte-SDK {sdk}.");
+            notes.Add($"targetSdk {target} is higher than the device SDK {sdk}.");
         }
 
         var launch = app.LaunchComponent ?? await ResolveLaunchComponentAsync(device, found.PackageName, cancellationToken);
@@ -185,7 +185,7 @@ public sealed class InventoryCollector(
 
     private async Task<string?> ResolveLaunchComponentAsync(DeviceOptions device, string package, CancellationToken cancellationToken)
     {
-        // "cmd package resolve-activity" gibt es ab Android 7. Auf älteren Geräten bleibt das Feld leer.
+        // "cmd package resolve-activity" exists since Android 7. On older devices the field stays empty.
         var result = await adb.ShellAsync(device, $"cmd package resolve-activity --brief {package}", cancellationToken);
         return result.Success ? AndroidParsers.ParseResolveActivity(result.Output) : null;
     }

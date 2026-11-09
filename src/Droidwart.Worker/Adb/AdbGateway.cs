@@ -30,11 +30,11 @@ public sealed class AdbGateway : IAdbGateway
             return state;
         }
 
-        _logger.LogInformation("Verbinde {Device} ({Serial}) …", device.Id, device.Serial);
+        _logger.LogInformation("Connecting {Device} ({Serial})…", device.Id, device.Serial);
         var response = await WithServerAsync(() => _client.ConnectAsync(device.Host, device.Port, cancellationToken));
         _logger.LogDebug("adb connect {Serial}: {Response}", device.Serial, response.Trim());
 
-        // Der Server meldet ein frisch verbundenes Gerät nicht sofort als "device".
+        // The server does not report a freshly connected device as "device" right away.
         for (var attempt = 0; attempt < 5; attempt++)
         {
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
@@ -51,13 +51,13 @@ public sealed class AdbGateway : IAdbGateway
     public async Task<ShellResult> ShellAsync(DeviceOptions device, string command, CancellationToken cancellationToken)
     {
         var deviceData = await FindDeviceAsync(device, cancellationToken)
-            ?? throw new InvalidOperationException($"Gerät {device.Id} ({device.Serial}) ist nicht verbunden.");
+            ?? throw new InvalidOperationException($"Device {device.Id} ({device.Serial}) is not connected.");
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_options.CommandTimeout);
 
         var receiver = new ConsoleOutputReceiver();
-        // ADB-Shell (Protokoll v1) liefert keinen Exit-Code, daher hängen wir ihn als Marker an.
+        // The ADB shell (protocol v1) does not return an exit code, so we append it as a marker.
         var wrapped = $"( {command} ); echo {ExitMarker}$?";
 
         await WithServerAsync(async () =>
@@ -110,7 +110,7 @@ public sealed class AdbGateway : IAdbGateway
         catch (SocketException ex)
         {
             throw new AdbServerUnavailableException(
-                $"ADB-Server {_options.ServerHost}:{_options.ServerPort} nicht erreichbar: {ex.Message}", ex);
+                $"ADB server {_options.ServerHost}:{_options.ServerPort} is not reachable: {ex.Message}", ex);
         }
     }
 }

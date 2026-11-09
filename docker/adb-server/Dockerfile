@@ -1,5 +1,5 @@
-# ADB-Server für den android-updater-Stack
-# Basis: Debian 13 (trixie), adb aus den offiziellen Debian-Paketen
+# ADB server for the Droidwart stack
+# Base: Debian 13 (trixie), adb from the official Debian packages
 FROM debian:trixie-slim
 
 RUN apt-get update \
@@ -14,8 +14,8 @@ COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
 USER adb
 WORKDIR /home/adb
 
-# Hier liegt das Schlüsselpaar (adbkey/adbkey.pub), das die Phones autorisieren.
-# Als Volume mounten, sonst ist nach jedem Container-Neubau eine neue Freigabe nötig.
+# Holds the key pair (adbkey/adbkey.pub) that the phones authorize.
+# Mount it as a volume, otherwise every rebuild requires a new authorization on the devices.
 VOLUME ["/home/adb/.android"]
 
 EXPOSE 5037

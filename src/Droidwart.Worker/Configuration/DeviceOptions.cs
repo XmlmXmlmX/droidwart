@@ -2,25 +2,25 @@ namespace Droidwart.Worker.Configuration;
 
 public sealed class DeviceOptions
 {
-    /// <summary>Technische Id, z. B. "android-ip-cam-garden". Wird später Teil der MQTT-Topics.</summary>
+    /// <summary>Technical id, e.g. "android-ip-cam-garden". Becomes part of the MQTT topics later.</summary>
     public string Id { get; set; } = "";
 
-    /// <summary>Anzeigename in Home Assistant.</summary>
+    /// <summary>Display name in Home Assistant.</summary>
     public string Name { get; set; } = "";
 
     public string Host { get; set; } = "";
 
     public int Port { get; set; } = 5555;
 
-    /// <summary>Name der Kamera in der Frigate-Konfiguration (für den Health-Check ab Phase 5).</summary>
+    /// <summary>Camera name in the Frigate configuration (used by the health check from phase 5).</summary>
     public string? FrigateCamera { get; set; }
 
-    /// <summary>Canary-Gerät: bekommt automatische Updates zuerst.</summary>
+    /// <summary>Canary device: receives automatic updates first.</summary>
     public bool Canary { get; set; }
 
-    /// <summary>Abweichende Paketnamen je App-Id, z. B. für eine versteckte Magisk-App.</summary>
+    /// <summary>Package name overrides per app id, e.g. for a hidden Magisk app.</summary>
     public Dictionary<string, string> PackageOverrides { get; set; } = new();
 
-    /// <summary>Seriennummer, unter der der ADB-Server das Gerät führt.</summary>
+    /// <summary>Serial under which the ADB server lists the device.</summary>
     public string Serial => $"{Host}:{Port}";
 }

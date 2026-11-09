@@ -4,6 +4,6 @@ public sealed class StorageOptions
 {
     public const string Section = "Storage";
 
-    /// <summary>Verzeichnis für Inventar, APK-Cache und Zustand. Im Container: /data (Volume).</summary>
+    /// <summary>Directory for inventory, APK cache and state. In the container: /data (volume).</summary>
     public string DataDirectory { get; set; } = "data";
 }

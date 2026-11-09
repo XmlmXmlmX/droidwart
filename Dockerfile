@@ -1,23 +1,27 @@
-# ADB server for the Droidwart stack
-# Base: Debian 13 (trixie), adb from the official Debian packages
-FROM debian:trixie-slim
+# Droidwart worker
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
+WORKDIR /src
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends adb tini ca-certificates \
- && rm -rf /var/lib/apt/lists/* \
- && useradd --create-home --uid 1000 --shell /usr/sbin/nologin adb \
- && mkdir -p /home/adb/.android \
- && chown -R adb:adb /home/adb/.android
+COPY Directory.Build.props ./
+COPY src/Droidwart.ServiceDefaults/Droidwart.ServiceDefaults.csproj src/Droidwart.ServiceDefaults/
+COPY src/Droidwart.Worker/Droidwart.Worker.csproj src/Droidwart.Worker/
+RUN dotnet restore src/Droidwart.Worker/Droidwart.Worker.csproj
 
-COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY src/ src/
+RUN dotnet publish src/Droidwart.Worker/Droidwart.Worker.csproj -c Release -o /app --no-restore
 
-USER adb
-WORKDIR /home/adb
+FROM mcr.microsoft.com/dotnet/runtime:11.0
+WORKDIR /app
 
-# Holds the key pair (adbkey/adbkey.pub) that the phones authorize.
-# Mount it as a volume, otherwise every rebuild requires a new authorization on the devices.
-VOLUME ["/home/adb/.android"]
+# Prepare the data directory so a named volume inherits the app user's permissions
+RUN mkdir -p /data && chown "$APP_UID" /data
 
-EXPOSE 5037
+COPY --from=build /app .
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+ENV DOTNET_ENVIRONMENT=Production \
+    Storage__DataDirectory=/data
+
+VOLUME ["/data"]
+USER $APP_UID
+
+ENTRYPOINT ["dotnet", "Droidwart.Worker.dll"]

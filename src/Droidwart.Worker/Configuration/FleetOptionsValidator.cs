@@ -4,8 +4,8 @@ using Microsoft.Extensions.Options;
 namespace Droidwart.Worker.Configuration;
 
 /// <summary>
-/// Prüft die Geräte- und App-Konfiguration beim Start.
-/// Paketnamen werden streng validiert, weil sie in Shell-Befehle auf dem Gerät einfließen.
+/// Validates the device and app configuration at startup.
+/// Package names are validated strictly because they are inserted into shell commands on the device.
 /// </summary>
 public sealed partial class FleetOptionsValidator : IValidateOptions<FleetOptions>
 {
@@ -29,39 +29,39 @@ public sealed partial class FleetOptionsValidator : IValidateOptions<FleetOption
 
         if (options.Devices.Count == 0)
         {
-            errors.Add("Keine Geräte konfiguriert (Abschnitt 'Devices').");
+            errors.Add("No devices configured (section 'Devices').");
         }
 
         var deviceIds = options.Devices.Select(d => d.Id).ToHashSet(StringComparer.Ordinal);
         var appIds = options.Apps.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
 
-        errors.AddRange(Duplicates(options.Devices.Select(d => d.Id), "Geräte-Id"));
-        errors.AddRange(Duplicates(options.Apps.Select(a => a.Id), "App-Id"));
+        errors.AddRange(Duplicates(options.Devices.Select(d => d.Id), "Device id"));
+        errors.AddRange(Duplicates(options.Apps.Select(a => a.Id), "App id"));
 
         if (options.Devices.Count(d => d.Canary) > 1)
         {
-            errors.Add("Höchstens ein Gerät darf als Canary markiert sein.");
+            errors.Add("At most one device may be marked as canary.");
         }
 
         foreach (var device in options.Devices)
         {
-            var prefix = $"Gerät '{device.Id}'";
+            var prefix = $"Device '{device.Id}'";
 
             if (!IdRegex().IsMatch(device.Id))
-                errors.Add($"{prefix}: Id muss aus Kleinbuchstaben, Ziffern und '-' bestehen.");
+                errors.Add($"{prefix}: id must consist of lowercase letters, digits and '-'.");
             if (string.IsNullOrWhiteSpace(device.Name))
-                errors.Add($"{prefix}: Name fehlt.");
+                errors.Add($"{prefix}: name is missing.");
             if (!HostRegex().IsMatch(device.Host))
-                errors.Add($"{prefix}: Host '{device.Host}' ist ungültig.");
+                errors.Add($"{prefix}: host '{device.Host}' is invalid.");
             if (device.Port is < 1 or > 65535)
-                errors.Add($"{prefix}: Port {device.Port} ist ungültig.");
+                errors.Add($"{prefix}: port {device.Port} is invalid.");
 
             foreach (var (appId, package) in device.PackageOverrides)
             {
                 if (!appIds.Contains(appId))
-                    errors.Add($"{prefix}: PackageOverrides verweist auf unbekannte App '{appId}'.");
+                    errors.Add($"{prefix}: PackageOverrides references unknown app '{appId}'.");
                 if (!IsValidPackageName(package))
-                    errors.Add($"{prefix}: Paketname '{package}' für '{appId}' ist ungültig.");
+                    errors.Add($"{prefix}: package name '{package}' for '{appId}' is invalid.");
             }
         }
 
@@ -70,17 +70,17 @@ public sealed partial class FleetOptionsValidator : IValidateOptions<FleetOption
             var prefix = $"App '{app.Id}'";
 
             if (!IdRegex().IsMatch(app.Id))
-                errors.Add($"{prefix}: Id muss aus Kleinbuchstaben, Ziffern und '-' bestehen.");
+                errors.Add($"{prefix}: id must consist of lowercase letters, digits and '-'.");
             if (!RepoRegex().IsMatch(app.Repo))
-                errors.Add($"{prefix}: Repo '{app.Repo}' muss das Format 'owner/name' haben.");
+                errors.Add($"{prefix}: repo '{app.Repo}' must use the format 'owner/name'.");
             if (!string.IsNullOrEmpty(app.Package) && !IsValidPackageName(app.Package))
-                errors.Add($"{prefix}: Paketname '{app.Package}' ist ungültig.");
+                errors.Add($"{prefix}: package name '{app.Package}' is invalid.");
 
             foreach (var alternative in app.AlternativePackages.Where(p => !IsValidPackageName(p)))
-                errors.Add($"{prefix}: alternativer Paketname '{alternative}' ist ungültig.");
+                errors.Add($"{prefix}: alternative package name '{alternative}' is invalid.");
 
             foreach (var deviceId in app.Devices.Where(id => !deviceIds.Contains(id)))
-                errors.Add($"{prefix}: verweist auf unbekanntes Gerät '{deviceId}'.");
+                errors.Add($"{prefix}: references unknown device '{deviceId}'.");
 
             try
             {
@@ -88,7 +88,7 @@ public sealed partial class FleetOptionsValidator : IValidateOptions<FleetOption
             }
             catch (ArgumentException ex)
             {
-                errors.Add($"{prefix}: AssetPattern ist kein gültiger regulärer Ausdruck ({ex.Message}).");
+                errors.Add($"{prefix}: AssetPattern is not a valid regular expression ({ex.Message}).");
             }
         }
 
@@ -98,5 +98,5 @@ public sealed partial class FleetOptionsValidator : IValidateOptions<FleetOption
     private static IEnumerable<string> Duplicates(IEnumerable<string> ids, string label) =>
         ids.GroupBy(id => id, StringComparer.Ordinal)
            .Where(g => g.Count() > 1)
-           .Select(g => $"{label} '{g.Key}' ist mehrfach vergeben.");
+           .Select(g => $"{label} '{g.Key}' is used more than once.");
 }

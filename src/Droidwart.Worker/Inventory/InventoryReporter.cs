@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace Droidwart.Worker.Inventory;
 
-/// <summary>Gibt das Inventar lesbar ins Log aus und speichert es als JSON im Datenverzeichnis.</summary>
+/// <summary>Writes the inventory to the log in readable form and saves it as JSON in the data directory.</summary>
 public sealed class InventoryReporter(IOptions<StorageOptions> storage, ILogger<InventoryReporter> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -31,7 +31,7 @@ public sealed class InventoryReporter(IOptions<StorageOptions> storage, ILogger<
 
             if (device.Info is { } info)
             {
-                logger.LogInformation("  Gerät: {Manufacturer} {Model}, Android {Android} (SDK {Sdk}), ABI {Abi} [{Abis}], {Bits}",
+                logger.LogInformation("  Device: {Manufacturer} {Model}, Android {Android} (SDK {Sdk}), ABI {Abi} [{Abis}], {Bits}",
                     info.Manufacturer, info.Model, info.AndroidVersion, info.Sdk, info.PrimaryAbi,
                     string.Join(", ", info.SupportedAbis), info.Is64Bit ? "64-bit" : "32-bit");
             }
@@ -40,17 +40,17 @@ public sealed class InventoryReporter(IOptions<StorageOptions> storage, ILogger<
             {
                 if (app.Package is { } p)
                 {
-                    logger.LogInformation("  {App,-14} {Package,-44} {Version} ({Code}) minSdk {MinSdk}, Quelle: {Installer}",
+                    logger.LogInformation("  {App,-14} {Package,-44} {Version} ({Code}) minSdk {MinSdk}, source: {Installer}",
                         app.AppId, p.PackageName, p.VersionName, p.VersionCode, p.MinSdk, InstallerNames.Describe(p.Installer));
                     if (app.LaunchComponent is not null)
                     {
-                        logger.LogInformation("  {Blank,-14} Start-Komponente: {Launch}", "", app.LaunchComponent);
+                        logger.LogInformation("  {Blank,-14} Launch component: {Launch}", "", app.LaunchComponent);
                     }
                 }
                 else
                 {
                     logger.LogInformation("  {App,-14} {Package,-44} {Status}",
-                        app.AppId, app.ConfiguredPackage ?? "(kein Paketname)", app.Status);
+                        app.AppId, app.ConfiguredPackage ?? "(no package name)", app.Status);
                 }
 
                 foreach (var note in app.Notes)
@@ -63,10 +63,10 @@ public sealed class InventoryReporter(IOptions<StorageOptions> storage, ILogger<
             var others = device.ThirdPartyPackages.Where(p => !managed.Contains(p.PackageName)).ToList();
             if (others.Count > 0)
             {
-                logger.LogInformation("  Weitere installierte Apps ({Count}):", others.Count);
+                logger.LogInformation("  Other installed apps ({Count}):", others.Count);
                 foreach (var package in others)
                 {
-                    logger.LogInformation("    {Package,-50} Quelle: {Installer}", package.PackageName, InstallerNames.Describe(package.Installer));
+                    logger.LogInformation("    {Package,-50} source: {Installer}", package.PackageName, InstallerNames.Describe(package.Installer));
                 }
             }
         }
@@ -86,6 +86,6 @@ public sealed class InventoryReporter(IOptions<StorageOptions> storage, ILogger<
         }
 
         File.Move(temp, target, overwrite: true);
-        logger.LogInformation("Inventar gespeichert: {Path}", Path.GetFullPath(target));
+        logger.LogInformation("Inventory saved: {Path}", Path.GetFullPath(target));
     }
 }

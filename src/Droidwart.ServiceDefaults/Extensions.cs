@@ -7,19 +7,19 @@ using OpenTelemetry.Trace;
 namespace Microsoft.Extensions.Hosting;
 
 /// <summary>
-/// Aspire-Standards für Droidwart: OpenTelemetry (Logs, Metriken, Traces) und Resilienz für HttpClients.
-/// Angepasst für einen Worker ohne HTTP-Endpunkte (keine ASP.NET-Core-Abhängigkeit, keine Health-Endpunkte).
+/// Aspire defaults for Droidwart: OpenTelemetry (logs, metrics, traces) and resilience for HttpClients.
+/// Adapted for a worker without HTTP endpoints (no ASP.NET Core dependency, no health endpoints).
 /// </summary>
 public static class Extensions
 {
-    /// <summary>Name der ActivitySource und des Meters, die Droidwart selbst verwendet.</summary>
+    /// <summary>Name of the ActivitySource and Meter used by Droidwart itself.</summary>
     public const string TelemetrySourceName = "Droidwart";
 
     public static TBuilder AddServiceDefaults<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
     {
         builder.ConfigureOpenTelemetry();
 
-        // Gilt ab Phase 2 für den GitHub-Client: Retries, Timeouts, Circuit Breaker
+        // Applies to the GitHub client from phase 2: retries, timeouts, circuit breaker
         builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
 
         return builder;
@@ -42,8 +42,8 @@ public static class Extensions
                 .AddSource(TelemetrySourceName)
                 .AddHttpClientInstrumentation());
 
-        // Export nur, wenn ein OTLP-Endpunkt gesetzt ist (Aspire setzt ihn automatisch).
-        // Im Portainer-Stack bleibt Telemetrie damit ausgeschaltet, solange keiner konfiguriert ist.
+        // Export only if an OTLP endpoint is set (Aspire sets it automatically).
+        // In the Portainer stack, telemetry stays off until one is configured.
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
         {
             builder.Services.AddOpenTelemetry().UseOtlpExporter();

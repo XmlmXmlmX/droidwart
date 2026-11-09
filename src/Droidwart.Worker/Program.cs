@@ -5,7 +5,7 @@ using Droidwart.Worker.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// OpenTelemetry & Resilienz (Aspire ServiceDefaults). Export nur, wenn OTEL_EXPORTER_OTLP_ENDPOINT gesetzt ist.
+// OpenTelemetry and resilience (Aspire ServiceDefaults). Exports only if OTEL_EXPORTER_OTLP_ENDPOINT is set.
 builder.AddServiceDefaults();
 
 builder.Logging.AddSimpleConsole(options =>

@@ -1,6 +1,6 @@
 namespace Droidwart.Worker.Inventory;
 
-/// <summary>Übersetzt den Installer-Paketnamen in eine lesbare Quelle.</summary>
+/// <summary>Translates the installer package name into a readable source.</summary>
 public static class InstallerNames
 {
     private static readonly Dictionary<string, (string Name, bool IsStore)> Known = new(StringComparer.Ordinal)
@@ -13,18 +13,18 @@ public static class InstallerNames
         ["com.aurora.store"] = ("Aurora Store", true),
         ["dev.imranr.obtainium"] = ("Obtainium", false),
         ["dev.imranr.obtainium.fdroid"] = ("Obtainium", false),
-        ["com.google.android.packageinstaller"] = ("System-Paketinstaller (APK-Datei)", false),
-        ["com.android.packageinstaller"] = ("System-Paketinstaller (APK-Datei)", false),
+        ["com.google.android.packageinstaller"] = ("System package installer (APK file)", false),
+        ["com.android.packageinstaller"] = ("System package installer (APK file)", false),
         ["com.android.shell"] = ("ADB", false),
     };
 
     public static string Describe(string? installer) =>
         installer is null
-            ? "unbekannt (ADB oder vorinstalliert)"
+            ? "unknown (ADB or preinstalled)"
             : Known.TryGetValue(installer, out var known) ? known.Name : installer;
 
     /// <summary>
-    /// Store-Builds sind oft anders signiert als GitHub-Builds (z. B. F-Droid vs. GitHub bei Termux).
+    /// Store builds are often signed differently than GitHub builds (e.g. F-Droid vs. GitHub for Termux).
     /// </summary>
     public static bool IsStore(string? installer) =>
         installer is not null && Known.TryGetValue(installer, out var known) && known.IsStore;

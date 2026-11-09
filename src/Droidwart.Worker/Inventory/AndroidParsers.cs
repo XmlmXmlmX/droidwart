@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace Droidwart.Worker.Inventory;
 
-/// <summary>Parser für die Textausgaben von getprop, dumpsys und pm.</summary>
+/// <summary>Parsers for the text output of getprop, dumpsys and pm.</summary>
 public static partial class AndroidParsers
 {
     [GeneratedRegex(@"\bversionCode=(\d+)")]
@@ -17,7 +17,7 @@ public static partial class AndroidParsers
     [GeneratedRegex(@"^package:(\S+?)(?:\s+installer=(\S+))?\s*$")]
     private static partial Regex PmListLineRegex();
 
-    /// <summary>Zeilen im Format "schlüssel=wert".</summary>
+    /// <summary>Lines in the format "key=value".</summary>
     public static Dictionary<string, string> ParseKeyValueLines(string output)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -34,8 +34,8 @@ public static partial class AndroidParsers
     }
 
     /// <summary>
-    /// Liest den Block "Package [name]" aus "dumpsys package name".
-    /// Es zählt nur der erste Block (installierte Version), nicht "Hidden system packages".
+    /// Reads the "Package [name]" block from "dumpsys package name".
+    /// Only the first block (installed version) counts, not "Hidden system packages".
     /// </summary>
     public static PackageDetails? ParseDumpsysPackage(string output, string packageName)
     {
@@ -56,7 +56,7 @@ public static partial class AndroidParsers
             var raw = lines[i];
             var line = raw.Trim();
 
-            // Ende des Blocks: nächstes Paket oder neue Sektion auf oberster Ebene
+            // End of block: next package or a new top-level section
             if (line.StartsWith("Package [", StringComparison.Ordinal) || (raw.Length > 0 && !char.IsWhiteSpace(raw[0])))
             {
                 break;
@@ -79,7 +79,7 @@ public static partial class AndroidParsers
         return new PackageDetails(packageName, versionName, versionCode, minSdk, targetSdk, installer, firstInstall, lastUpdate);
     }
 
-    /// <summary>Ausgabe von "pm list packages -3 -i".</summary>
+    /// <summary>Output of "pm list packages -3 -i".</summary>
     public static List<InstalledPackage> ParsePmListPackages(string output)
     {
         var result = new List<InstalledPackage>();
@@ -98,7 +98,7 @@ public static partial class AndroidParsers
         return result.OrderBy(p => p.PackageName, StringComparer.Ordinal).ToList();
     }
 
-    /// <summary>Ausgabe von "cmd package resolve-activity --brief paket": letzte Zeile ist "paket/.Activity".</summary>
+    /// <summary>Output of "cmd package resolve-activity --brief package": the last line is "package/.Activity".</summary>
     public static string? ParseResolveActivity(string output) =>
         SplitLines(output)
             .Select(l => l.Trim())

@@ -5,8 +5,8 @@ using Microsoft.Extensions.Options;
 namespace Droidwart.Worker.Services;
 
 /// <summary>
-/// Phase 1: liest das Inventar beim Start und danach im Intervall Schedule:InventoryInterval.
-/// Mit --RunOnce=true wird genau ein Durchlauf gemacht und die Anwendung beendet.
+/// Phase 1: reads the inventory at startup and then every Schedule:InventoryInterval.
+/// With --RunOnce=true it performs a single run and stops the application.
 /// </summary>
 public sealed class InventoryWorker(
     InventoryCollector collector,
@@ -40,7 +40,7 @@ public sealed class InventoryWorker(
 
         try
         {
-            logger.LogInformation("Inventar wird gelesen …");
+            logger.LogInformation("Reading inventory…");
             var inventory = await collector.CollectAsync(stoppingToken);
             reporter.Log(inventory);
             await reporter.SaveAsync(inventory, stoppingToken);
@@ -48,7 +48,7 @@ public sealed class InventoryWorker(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
-            logger.LogError(ex, "Inventar-Durchlauf fehlgeschlagen");
+            logger.LogError(ex, "Inventory run failed");
         }
     }
 }

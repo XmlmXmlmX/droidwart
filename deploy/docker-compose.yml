@@ -1,4 +1,4 @@
-# Portainer-Stack "droidwart"
+# Portainer stack "droidwart"
 services:
   adb-server:
     image: ghcr.io/xmlmxmlmx/droidwart-adb-server:1.0.0
@@ -8,8 +8,8 @@ services:
     volumes:
       - adb-keys:/home/adb/.android
     ports:
-      # Nur nötig, wenn Home Assistant die ADB-Integration im Modus "ADB Server" nutzt.
-      # Keine Authentifizierung: per Proxmox-Firewall auf 192.168.178.157 beschränken.
+      # Only needed if Home Assistant uses the ADB integration in "ADB server" mode.
+      # No authentication: restrict to 192.168.178.157 via the Proxmox firewall.
       - "5037:5037"
     restart: unless-stopped
 
@@ -19,14 +19,14 @@ services:
     environment:
       - Adb__ServerHost=adb-server
       - Adb__ServerPort=5037
-      # ab Phase 3:
+      # from phase 3:
       - Mqtt__Host=192.168.178.157
       - Mqtt__Port=1883
       - Mqtt__Username=droidwart
       - Mqtt__Password=${MQTT_PASSWORD}
-      # ab Phase 5:
+      # from phase 5:
       - Frigate__BaseUrl=http://192.168.178.11:5000
-      # ab Phase 2 (optional, nur Lesezugriff):
+      # from phase 2 (optional, read-only access):
       - GitHub__Token=${GITHUB_TOKEN:-}
     volumes:
       - droidwart-data:/data

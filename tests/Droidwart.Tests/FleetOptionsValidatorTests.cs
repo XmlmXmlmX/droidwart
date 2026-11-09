@@ -9,7 +9,7 @@ public class FleetOptionsValidatorTests
     {
         Devices =
         {
-            new DeviceOptions { Id = "android-ip-cam-garden", Name = "Garten", Host = "192.168.178.164", Canary = true },
+            new DeviceOptions { Id = "android-ip-cam-garden", Name = "Garden", Host = "192.168.178.164", Canary = true },
             new DeviceOptions { Id = "android-ip-cam-garage", Name = "Garage", Host = "192.168.178.160" },
         },
         Apps =
@@ -36,7 +36,7 @@ public class FleetOptionsValidatorTests
         var result = Validator.Validate(null, fleet);
 
         Assert.True(result.Failed);
-        Assert.Contains(result.Failures!, f => f.Contains("mehrfach", StringComparison.Ordinal));
+        Assert.Contains(result.Failures!, f => f.Contains("more than once", StringComparison.Ordinal));
     }
 
     [Theory]

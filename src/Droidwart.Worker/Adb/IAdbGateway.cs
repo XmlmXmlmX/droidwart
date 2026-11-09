@@ -10,21 +10,21 @@ public enum ConnectionState
     Unreachable,
 }
 
-/// <summary>Ergebnis eines Shell-Befehls. ExitCode ist null, wenn er nicht ermittelt werden konnte.</summary>
+/// <summary>Result of a shell command. ExitCode is null if it could not be determined.</summary>
 public sealed record ShellResult(string Output, int? ExitCode)
 {
     public bool Success => ExitCode == 0;
 }
 
-/// <summary>Der ADB-Server selbst (Port 5037) ist nicht erreichbar.</summary>
+/// <summary>The ADB server itself (port 5037) is not reachable.</summary>
 public sealed class AdbServerUnavailableException(string message, Exception inner) : Exception(message, inner);
 
-/// <summary>Kapselt alle ADB-Zugriffe, damit der Rest des Codes testbar bleibt.</summary>
+/// <summary>Encapsulates all ADB access so the rest of the code stays testable.</summary>
 public interface IAdbGateway
 {
-    /// <summary>Stellt sicher, dass das Gerät am ADB-Server verbunden ist.</summary>
+    /// <summary>Ensures the device is connected to the ADB server.</summary>
     Task<ConnectionState> EnsureConnectedAsync(DeviceOptions device, CancellationToken cancellationToken);
 
-    /// <summary>Führt einen Befehl in der Shell des Geräts aus (als ADB-Shell-User, ohne Root).</summary>
+    /// <summary>Runs a command in the device shell (as the ADB shell user, without root).</summary>
     Task<ShellResult> ShellAsync(DeviceOptions device, string command, CancellationToken cancellationToken);
 }
