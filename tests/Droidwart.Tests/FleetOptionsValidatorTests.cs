@@ -18,13 +18,13 @@ public class FleetOptionsValidatorTests
             {
                 Id = "termux",
                 Repo = "termux/termux-app",
-                Variants = { new AppVariant { Package = "com.termux", AssetPattern = "github.*{abi}.*\\.apk$" } },
+                Variants = { new AppVariant { Package = "com.termux", AssetPattern = @"^termux-app_v[\d.]+\+github-debug_{abi}\.apk$" } },
             },
             new AppOptions
             {
-                Id = "ip-camera",
-                Repo = "DigitallyRefined/android-ip-camera",
-                Variants = { new AppVariant { Package = "com.example.ipcamera" } },
+                Id = "magisk",
+                Repo = "topjohnwu/Magisk",
+                Variants = { new AppVariant { Package = "com.topjohnwu.magisk", AssetPattern = @"^Magisk-v[\d.]+\.apk$" } },
             },
         },
     };
@@ -34,7 +34,9 @@ public class FleetOptionsValidatorTests
     [Fact]
     public void ValidConfiguration_Succeeds()
     {
-        Assert.True(Validator.Validate(null, ValidFleet()).Succeeded);
+        var result = Validator.Validate(null, ValidFleet());
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Failures ?? []));
     }
 
     [Fact]
@@ -62,10 +64,28 @@ public class FleetOptionsValidatorTests
     }
 
     [Fact]
+    public void AppWithoutVariants_Fails()
+    {
+        var fleet = ValidFleet();
+        fleet.Apps[0].Variants.Clear();
+
+        Assert.True(Validator.Validate(null, fleet).Failed);
+    }
+
+    [Fact]
+    public void InvalidAssetPattern_Fails()
+    {
+        var fleet = ValidFleet();
+        fleet.Apps[0].Variants[0].AssetPattern = "([unclosed";
+
+        Assert.True(Validator.Validate(null, fleet).Failed);
+    }
+
+    [Fact]
     public void UnknownDeviceReference_Fails()
     {
         var fleet = ValidFleet();
-        fleet.Apps[0].Devices.Add("android-ip-cam-keller");
+        fleet.Apps[0].Devices.Add("android-ip-cam-cellar");
 
         Assert.True(Validator.Validate(null, fleet).Failed);
     }
@@ -80,25 +100,17 @@ public class FleetOptionsValidatorTests
     }
 
     [Fact]
-    public void ResolveVariants_PrefersDevicePackageOverride()
+    public void ResolveVariants_AppliesDeviceOverrideToDefaultVariant()
     {
         var fleet = ValidFleet();
-        var magisk = new AppOptions
-        {
-            Id = "magisk",
-            Repo = "topjohnwu/Magisk",
-            Variants =
-            {
-                new AppVariant { Package = "com.topjohnwu.magisk", AssetPattern = "^Magisk-v.*\\.apk$" },
-            },
-        };
+        var magisk = fleet.Apps[1];
         fleet.Devices[0].PackageOverrides["magisk"] = "io.example.hidden";
 
         var overridden = FleetOptions.ResolveVariants(magisk, fleet.Devices[0]);
-        var unchanged = FleetOptions.ResolveVariants(magisk, fleet.Devices[1]);
+        var regular = FleetOptions.ResolveVariants(magisk, fleet.Devices[1]);
 
         Assert.Equal("io.example.hidden", overridden[0].Package);
-        Assert.Equal("^Magisk-v.*\\.apk$", overridden[0].AssetPattern);
-        Assert.Equal("com.topjohnwu.magisk", unchanged[0].Package);
+        Assert.Equal(magisk.Variants[0].AssetPattern, overridden[0].AssetPattern);
+        Assert.Equal("com.topjohnwu.magisk", regular[0].Package);
     }
 }

@@ -36,6 +36,7 @@ public sealed class HomeAssistantPublisher
         _lastInventory = inventory;
         if (!_mqtt.IsConnected)
         {
+            _logger.LogInformation("MQTT not connected; the inventory will be published as soon as the connection is up");
             return;
         }
 

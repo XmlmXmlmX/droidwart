@@ -4,6 +4,8 @@ using Droidwart.Worker.Configuration;
 using Droidwart.Worker.Inventory;
 using Droidwart.Worker.Updates;
 
+using WorkerUpdateState = Droidwart.Worker.Updates.UpdateState;
+
 namespace Droidwart.Worker.Mqtt;
 
 public sealed record MqttMessage(string Topic, string Payload);
@@ -88,15 +90,15 @@ public static class DiscoveryPayloads
 
         switch (update.State)
         {
-            case Droidwart.Worker.Updates.UpdateState.NotInstalled:
+            case WorkerUpdateState.NotInstalled:
                 installedVersion = NotInstalled;
                 latestVersion = update.LatestVersion ?? update.LatestTag;
                 break;
-            case Droidwart.Worker.Updates.UpdateState.UpdateAvailable:
+            case WorkerUpdateState.UpdateAvailable:
                 installedVersion = installed;
                 latestVersion = update.LatestVersion ?? update.LatestTag;
                 break;
-            case Droidwart.Worker.Updates.UpdateState.Unknown:
+            case WorkerUpdateState.Unknown:
                 installedVersion = installedRaw;
                 latestVersion = update.LatestTag;
                 break;

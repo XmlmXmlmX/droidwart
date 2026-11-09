@@ -4,7 +4,7 @@ Self-hosted .NET worker that keeps rooted Android devices up to date via ADB. Tr
 and exposes app updates as native Home Assistant update entities over MQTT. Built for old phones
 repurposed as CCTV cameras.
 
-Status: **Phase 1 – Inventory** (device info, installed versions, install source, launch components).
+Status: **Phase 3 – Home Assistant** (inventory and release check, published via MQTT discovery as update entities plus an ADB connectivity sensor per device).
 
 ## Requirements
 
@@ -36,12 +36,8 @@ Inventory output: logs in the dashboard and `data/inventory.json` in the reposit
 
 ## Images
 
-    docker build -t ghcr.io/xmlmxmlmx/droidwart:dev .
+    docker build -t ghcr.io/xmlmxmlmx/droidwart:dev --build-arg DOTNET_TAG=11.0-preview .
     docker build -t ghcr.io/xmlmxmlmx/droidwart-adb-server:dev docker/adb-server
-
-Pull requests run the tests and build both images. To publish versioned images and create a
-GitHub Release with generated release notes, push a version tag such as `v1.2.3`. The images
-are published to GHCR as `1.2.3` and `latest`.
 
 Deployment as a Portainer stack: `deploy/docker-compose.yml`.
 
@@ -57,3 +53,8 @@ Deployment as a Portainer stack: `deploy/docker-compose.yml`.
 ## License
 
 MIT
+
+## CI
+
+`.github/workflows/build.yml` runs the tests and publishes both images to GHCR:
+`edge` for every push to `main`, `x.y.z` and `x.y` for tags like `v1.0.0`.

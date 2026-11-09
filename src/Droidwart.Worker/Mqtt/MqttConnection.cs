@@ -63,6 +63,9 @@ public sealed class MqttConnection : BackgroundService
         }
 
         var clientOptions = BuildClientOptions();
+        _logger.LogInformation("MQTT enabled: broker {Host}:{Port}, user {User}, client id {ClientId}, base topic {BaseTopic}",
+            _options.Host, _options.Port, string.IsNullOrWhiteSpace(_options.Username) ? "(anonymous)" : _options.Username,
+            _options.ClientId, _options.BaseTopic);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -70,10 +73,18 @@ public sealed class MqttConnection : BackgroundService
             {
                 try
                 {
-                    await _client.ConnectAsync(clientOptions, stoppingToken);
+                    if (!_connectFailureLogged)
+                    {
+                        _logger.LogInformation("Connecting to MQTT broker {Host}:{Port}…", _options.Host, _options.Port);
+                    }
+
+                    // Hard upper bound in addition to the MQTTnet timeout, so a hanging TCP connect cannot block the loop.
+                    using var attempt = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                    attempt.CancelAfter(TimeSpan.FromSeconds(20));
+                    await _client.ConnectAsync(clientOptions, attempt.Token);
                     _connectFailureLogged = false;
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
                 {
                     // Log the first failure as a warning, repeated failures only at debug level.
                     if (!_connectFailureLogged)
