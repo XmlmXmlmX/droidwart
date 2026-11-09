@@ -14,8 +14,18 @@ public class FleetOptionsValidatorTests
         },
         Apps =
         {
-            new AppOptions { Id = "termux", Repo = "termux/termux-app", Package = "com.termux", AssetPattern = "github.*{abi}.*\\.apk$" },
-            new AppOptions { Id = "ip-camera", Repo = "DigitallyRefined/android-ip-camera", Package = null },
+            new AppOptions
+            {
+                Id = "termux",
+                Repo = "termux/termux-app",
+                Variants = { new AppVariant { Package = "com.termux", AssetPattern = "github.*{abi}.*\\.apk$" } },
+            },
+            new AppOptions
+            {
+                Id = "ip-camera",
+                Repo = "DigitallyRefined/android-ip-camera",
+                Variants = { new AppVariant { Package = "com.example.ipcamera" } },
+            },
         },
     };
 
@@ -46,7 +56,7 @@ public class FleetOptionsValidatorTests
     public void UnsafeOrInvalidPackageName_Fails(string package)
     {
         var fleet = ValidFleet();
-        fleet.Apps[0].Package = package;
+        fleet.Apps[0].Variants[0].Package = package;
 
         Assert.True(Validator.Validate(null, fleet).Failed);
     }
@@ -70,13 +80,25 @@ public class FleetOptionsValidatorTests
     }
 
     [Fact]
-    public void ResolvePackage_PrefersDeviceOverride()
+    public void ResolveVariants_PrefersDevicePackageOverride()
     {
         var fleet = ValidFleet();
-        var magisk = new AppOptions { Id = "magisk", Repo = "topjohnwu/Magisk", Package = "com.topjohnwu.magisk" };
+        var magisk = new AppOptions
+        {
+            Id = "magisk",
+            Repo = "topjohnwu/Magisk",
+            Variants =
+            {
+                new AppVariant { Package = "com.topjohnwu.magisk", AssetPattern = "^Magisk-v.*\\.apk$" },
+            },
+        };
         fleet.Devices[0].PackageOverrides["magisk"] = "io.example.hidden";
 
-        Assert.Equal("io.example.hidden", FleetOptions.ResolvePackage(magisk, fleet.Devices[0]));
-        Assert.Equal("com.topjohnwu.magisk", FleetOptions.ResolvePackage(magisk, fleet.Devices[1]));
+        var overridden = FleetOptions.ResolveVariants(magisk, fleet.Devices[0]);
+        var unchanged = FleetOptions.ResolveVariants(magisk, fleet.Devices[1]);
+
+        Assert.Equal("io.example.hidden", overridden[0].Package);
+        Assert.Equal("^Magisk-v.*\\.apk$", overridden[0].AssetPattern);
+        Assert.Equal("com.topjohnwu.magisk", unchanged[0].Package);
     }
 }
