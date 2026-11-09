@@ -47,6 +47,12 @@ public sealed class AppOptions
     /// <summary>If set (e.g. "github"), a warning is issued when the app was installed from a store.</summary>
     public string? RequireInstallSource { get; set; }
 
+    /// <summary>
+    /// Grant all runtime permissions on install ("pm install -g"). Useful for headless devices,
+    /// e.g. camera and microphone for the IP camera app.
+    /// </summary>
+    public bool GrantPermissions { get; set; }
+
     /// <summary>Component to relaunch after an update ("package/.Activity"). Empty = resolve automatically.</summary>
     public string? LaunchComponent { get; set; }
 

@@ -19,12 +19,14 @@ public sealed class HomeAssistantPublisher
     private readonly ILogger<HomeAssistantPublisher> _logger;
     private readonly ConcurrentDictionary<string, bool> _availability = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _publishLock = new(1, 1);
-    private FleetInventory? _lastInventory;
+    private readonly InventoryStore _store;
 
     public HomeAssistantPublisher(
-        MqttConnection mqtt, IOptions<MqttOptions> options, IOptionsMonitor<FleetOptions> fleet, ILogger<HomeAssistantPublisher> logger)
+        MqttConnection mqtt, InventoryStore store, IOptions<MqttOptions> options, IOptionsMonitor<FleetOptions> fleet,
+        ILogger<HomeAssistantPublisher> logger)
     {
         _mqtt = mqtt;
+        _store = store;
         _options = options.Value;
         _fleet = fleet;
         _logger = logger;
@@ -33,7 +35,6 @@ public sealed class HomeAssistantPublisher
 
     public async Task PublishInventoryAsync(FleetInventory inventory, CancellationToken cancellationToken)
     {
-        _lastInventory = inventory;
         if (!_mqtt.IsConnected)
         {
             _logger.LogInformation("MQTT not connected; the inventory will be published as soon as the connection is up");
@@ -92,9 +93,17 @@ public sealed class HomeAssistantPublisher
         }
     }
 
+    /// <summary>Publishes the state of a single app, optionally with installation progress or a message.</summary>
+    public async Task PublishAppStateAsync(
+        string deviceId, AppInventoryEntry entry, CancellationToken cancellationToken,
+        bool inProgress = false, int? percentage = null, string? summary = null)
+    {
+        await PublishAsync(DiscoveryPayloads.UpdateState(_options, deviceId, entry, inProgress, percentage, summary), cancellationToken);
+    }
+
     private async Task RepublishAsync(CancellationToken cancellationToken)
     {
-        if (_lastInventory is { } inventory)
+        if (_store.Current is { } inventory)
         {
             await PublishInventoryAsync(inventory, cancellationToken);
         }

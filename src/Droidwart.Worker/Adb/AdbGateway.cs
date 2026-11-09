@@ -102,6 +102,43 @@ public sealed class AdbGateway : IAdbGateway
         return ParseShellOutput(receiver.ToString());
     }
 
+    public async Task InstallAsync(DeviceOptions device, string apkPath, IReadOnlyList<string> arguments, Action<double> uploadProgress,
+        CancellationToken cancellationToken)
+    {
+        var deviceData = await FindDeviceAsync(device, cancellationToken)
+            ?? throw new InvalidOperationException($"Device {device.Id} ({device.Serial}) is not connected.");
+
+        // Large APKs over Wi-Fi take a while; the regular shell timeout is far too short.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(10));
+
+        await using var apk = File.OpenRead(apkPath);
+        try
+        {
+            await WithServerAsync(async () =>
+            {
+                await _client.InstallAsync(
+                    deviceData,
+                    apk,
+                    e =>
+                    {
+                        if (e.State == PackageInstallProgressState.Uploading)
+                        {
+                            uploadProgress(e.UploadProgress);
+                        }
+                    },
+                    timeout.Token,
+                    [.. arguments]);
+                return true;
+            });
+        }
+        catch (AdbException ex)
+        {
+            // e.g. "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: ...]"
+            throw new InvalidOperationException(ex.Message.Trim(), ex);
+        }
+    }
+
     public static ShellResult ParseShellOutput(string raw)
     {
         var index = raw.LastIndexOf(ExitMarker, StringComparison.Ordinal);

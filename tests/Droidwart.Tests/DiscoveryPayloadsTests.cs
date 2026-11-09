@@ -34,7 +34,42 @@ public class DiscoveryPayloadsTests
         Assert.Equal("update.droidwart_android_ip_cam_garden_ha_companion", (string?)json["default_entity_id"]);
         Assert.Equal("droidwart/android-ip-cam-garden/ha-companion/state", (string?)json["state_topic"]);
         Assert.Equal("Android", (string?)json["device"]!["manufacturer"]);
+        Assert.Equal("droidwart/android-ip-cam-garden/ha-companion/install", (string?)json["command_topic"]);
+        Assert.Equal("install", (string?)json["payload_install"]);
+    }
+
+    [Fact]
+    public void NotifyPolicy_HasNoInstallButton()
+    {
+        var magisk = new AppOptions { Id = "magisk", Name = "Magisk", Repo = "topjohnwu/Magisk", Policy = UpdatePolicy.Notify };
+
+        var json = JsonNode.Parse(DiscoveryPayloads.UpdateConfig(Mqtt, Garden, Info, magisk).Payload)!;
+
         Assert.Null(json["command_topic"]);
+    }
+
+    [Fact]
+    public void Progress_IsReportedWhileInstalling_AndResetAfterwards()
+    {
+        var entry = Entry(null, Check(UpdateState.NotInstalled, "2026.11.1"));
+
+        var running = JsonNode.Parse(DiscoveryPayloads.UpdateState(Mqtt, Garden.Id, entry, inProgress: true, percentage: 45).Payload)!;
+        var finished = JsonNode.Parse(DiscoveryPayloads.UpdateState(Mqtt, Garden.Id, entry).Payload)!;
+
+        Assert.True((bool)running["in_progress"]!);
+        Assert.Equal(45, (int)running["update_percentage"]!);
+        Assert.False((bool)finished["in_progress"]!);
+        Assert.Null(finished["update_percentage"]);
+    }
+
+    [Fact]
+    public void Summary_OverridesReleaseNotes()
+    {
+        var entry = Entry(null, Check(UpdateState.NotInstalled, "2026.11.1") with { ReleaseNotes = "notes" });
+
+        var json = JsonNode.Parse(DiscoveryPayloads.UpdateState(Mqtt, Garden.Id, entry, summary: "Installation failed: x").Payload)!;
+
+        Assert.Equal("Installation failed: x", (string?)json["release_summary"]);
     }
 
     [Fact]

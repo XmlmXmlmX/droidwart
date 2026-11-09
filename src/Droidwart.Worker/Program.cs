@@ -2,6 +2,7 @@ using Droidwart.Worker.Adb;
 using System.Net.Http.Headers;
 using Droidwart.Worker.Configuration;
 using Droidwart.Worker.GitHub;
+using Droidwart.Worker.Installs;
 using Droidwart.Worker.Inventory;
 using Droidwart.Worker.Mqtt;
 using Droidwart.Worker.Services;
@@ -33,8 +34,19 @@ builder.Services.AddHttpClient(GitHubReleaseClient.HttpClientName, (services, cl
     {
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.Token);
     }
-});
+})
+.AddStandardResilienceHandler();
 builder.Services.AddSingleton<GitHubReleaseClient>();
+
+// APK downloads can take minutes, so this client has no resilience handler (its timeouts are far too short).
+builder.Services.AddHttpClient(ApkDownloader.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(10);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Droidwart (+https://github.com/XmlmXmlmX/droidwart)");
+});
+builder.Services.AddSingleton<ApkDownloader>();
+builder.Services.AddSingleton<InstallQueue>();
+builder.Services.AddSingleton<InventoryStore>();
 builder.Services.AddSingleton<InventoryCollector>();
 builder.Services.AddSingleton<InventoryReporter>();
 builder.Services.AddSingleton<InventoryTrigger>();
@@ -46,6 +58,7 @@ builder.Services.AddSingleton<HomeAssistantPublisher>();
 
 builder.Services.AddHostedService<InventoryWorker>();
 builder.Services.AddHostedService<ConnectionMonitorWorker>();
+builder.Services.AddHostedService<InstallService>();
 
 var host = builder.Build();
 await host.RunAsync();

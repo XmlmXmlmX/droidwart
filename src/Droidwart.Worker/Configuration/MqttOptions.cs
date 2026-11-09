@@ -28,4 +28,11 @@ public sealed class MqttOptions
     public string AvailabilityTopic(string deviceId) => $"{BaseTopic}/{deviceId}/availability";
 
     public string UpdateStateTopic(string deviceId, string appId) => $"{BaseTopic}/{deviceId}/{appId}/state";
+
+    public string InstallCommandTopic(string deviceId, string appId) => $"{BaseTopic}/{deviceId}/{appId}/install";
+
+    /// <summary>Subscription filter for all install commands.</summary>
+    public string InstallCommandFilter => $"{BaseTopic}/+/+/install";
+
+    public const string InstallPayload = "install";
 }

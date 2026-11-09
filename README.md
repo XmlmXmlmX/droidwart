@@ -4,7 +4,7 @@ Self-hosted .NET worker that keeps rooted Android devices up to date via ADB. Tr
 and exposes app updates as native Home Assistant update entities over MQTT. Built for old phones
 repurposed as CCTV cameras.
 
-Status: **Phase 3 – Home Assistant** (inventory and release check, published via MQTT discovery as update entities plus an ADB connectivity sensor per device).
+Status: **Phase 4 – Install** (inventory, release check, Home Assistant update entities with install button, verified APK download and installation via ADB).
 
 ## Requirements
 

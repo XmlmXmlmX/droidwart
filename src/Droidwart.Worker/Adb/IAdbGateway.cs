@@ -30,4 +30,12 @@ public interface IAdbGateway
 
     /// <summary>Runs a command in the device shell (as the ADB shell user, without root).</summary>
     Task<ShellResult> ShellAsync(DeviceOptions device, string command, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Streams an APK to the device and installs it ("cmd package install").
+    /// <paramref name="uploadProgress"/> receives 0–100 while the APK is transferred.
+    /// Throws <see cref="InvalidOperationException"/> with the package manager's message if the installation fails.
+    /// </summary>
+    Task InstallAsync(DeviceOptions device, string apkPath, IReadOnlyList<string> arguments, Action<double> uploadProgress,
+        CancellationToken cancellationToken);
 }

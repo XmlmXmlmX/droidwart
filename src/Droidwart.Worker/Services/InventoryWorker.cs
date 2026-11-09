@@ -14,6 +14,7 @@ public sealed class InventoryWorker(
     InventoryCollector collector,
     InventoryReporter reporter,
     HomeAssistantPublisher publisher,
+    InventoryStore store,
     InventoryTrigger trigger,
     IOptions<ScheduleOptions> schedule,
     IConfiguration configuration,
@@ -51,6 +52,7 @@ public sealed class InventoryWorker(
         {
             logger.LogInformation("Reading inventory…");
             var inventory = await collector.CollectAsync(stoppingToken);
+            store.Set(inventory);
             reporter.Log(inventory);
             await reporter.SaveAsync(inventory, stoppingToken);
             await publisher.PublishInventoryAsync(inventory, stoppingToken);

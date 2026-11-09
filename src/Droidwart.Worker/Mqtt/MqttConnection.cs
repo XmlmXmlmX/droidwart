@@ -1,4 +1,5 @@
 using Droidwart.Worker.Configuration;
+using Droidwart.Worker.Installs;
 using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Protocol;
@@ -19,15 +20,18 @@ public sealed class MqttConnection : BackgroundService
     private readonly MqttOptions _options;
     private readonly ILogger<MqttConnection> _logger;
     private readonly IMqttClient _client;
+    private readonly InstallQueue _installQueue;
     private bool _connectFailureLogged;
 
-    public MqttConnection(IOptions<MqttOptions> options, ILogger<MqttConnection> logger)
+    public MqttConnection(IOptions<MqttOptions> options, InstallQueue installQueue, ILogger<MqttConnection> logger)
     {
         _options = options.Value;
+        _installQueue = installQueue;
         _logger = logger;
         _client = new MqttClientFactory().CreateMqttClient();
         _client.ConnectedAsync += OnConnectedAsync;
         _client.DisconnectedAsync += OnDisconnectedAsync;
+        _client.ApplicationMessageReceivedAsync += OnMessageReceivedAsync;
     }
 
     /// <summary>Raised after every (re)connect. Handlers publish discovery and state again.</summary>
@@ -81,27 +85,55 @@ public sealed class MqttConnection : BackgroundService
                     // Hard upper bound in addition to the MQTTnet timeout, so a hanging TCP connect cannot block the loop.
                     using var attempt = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
                     attempt.CancelAfter(TimeSpan.FromSeconds(20));
-                    await _client.ConnectAsync(clientOptions, attempt.Token);
-                    _connectFailureLogged = false;
-                }
-                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
-                {
-                    // Log the first failure as a warning, repeated failures only at debug level.
-                    if (!_connectFailureLogged)
+                    // MQTTnet 5 does not throw when the broker rejects the connection; it returns a result code.
+                    var result = await _client.ConnectAsync(clientOptions, attempt.Token);
+                    if (result.ResultCode == MqttClientConnectResultCode.Success)
                     {
-                        _logger.LogWarning("Could not connect to MQTT broker {Host}:{Port}: {Message}. Retrying every {Delay}.",
-                            _options.Host, _options.Port, ex.Message, ReconnectDelay);
-                        _connectFailureLogged = true;
+                        _connectFailureLogged = false;
                     }
                     else
                     {
-                        _logger.LogDebug(ex, "MQTT reconnect failed");
+                        LogConnectFailure(DescribeRejection(result.ResultCode, result.ReasonString), null);
                     }
+                }
+                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+                {
+                    LogConnectFailure(ex.Message, ex);
                 }
             }
 
             await Task.Delay(ReconnectDelay, stoppingToken);
         }
+    }
+
+    private void LogConnectFailure(string reason, Exception? exception)
+    {
+        // Log the first failure as a warning, repeated failures only at debug level.
+        if (!_connectFailureLogged)
+        {
+            _logger.LogWarning("Could not connect to MQTT broker {Host}:{Port}: {Reason}. Retrying every {Delay}.",
+                _options.Host, _options.Port, reason, ReconnectDelay);
+            _connectFailureLogged = true;
+        }
+        else
+        {
+            _logger.LogDebug(exception, "MQTT reconnect failed: {Reason}", reason);
+        }
+    }
+
+    private static string DescribeRejection(MqttClientConnectResultCode code, string? reasonString)
+    {
+        var hint = code switch
+        {
+            MqttClientConnectResultCode.BadUserNameOrPassword or MqttClientConnectResultCode.NotAuthorized =>
+                " Check Mqtt:Username and the MQTT_PASSWORD of the stack.",
+            MqttClientConnectResultCode.ClientIdentifierNotValid =>
+                " Another client may be using the same client id.",
+            _ => "",
+        };
+
+        var reason = string.IsNullOrWhiteSpace(reasonString) ? "" : $" ({reasonString})";
+        return $"broker rejected the connection: {code}{reason}.{hint}";
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
@@ -152,6 +184,15 @@ public sealed class MqttConnection : BackgroundService
         {
             await PublishAsync(_options.StatusTopic, Online, retain: true, CancellationToken.None);
 
+            try
+            {
+                await _client.SubscribeAsync(_options.InstallCommandFilter, MqttQualityOfServiceLevel.AtLeastOnce);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Subscribing to {Filter} failed; install commands will not work", _options.InstallCommandFilter);
+            }
+
             if (Connected is { } handlers)
             {
                 foreach (var handler in handlers.GetInvocationList().Cast<Func<CancellationToken, Task>>())
@@ -167,6 +208,43 @@ public sealed class MqttConnection : BackgroundService
                 }
             }
         });
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs args)
+    {
+        var message = args.ApplicationMessage;
+
+        // Never act on retained commands: they would re-trigger an installation after every reconnect.
+        if (message.Retain)
+        {
+            return Task.CompletedTask;
+        }
+
+        // Expected: <base>/<device>/<app>/install with payload "install"
+        var parts = message.Topic.Split('/');
+        if (parts.Length != 4 || parts[0] != _options.BaseTopic || parts[3] != "install")
+        {
+            return Task.CompletedTask;
+        }
+
+        var payload = message.ConvertPayloadToString();
+        if (payload != MqttOptions.InstallPayload)
+        {
+            _logger.LogWarning("Ignoring unexpected payload on {Topic}", message.Topic);
+            return Task.CompletedTask;
+        }
+
+        var request = new InstallRequest(parts[1], parts[2], "Home Assistant");
+        if (_installQueue.TryEnqueue(request))
+        {
+            _logger.LogInformation("Install requested for {App} on {Device}", request.AppId, request.DeviceId);
+        }
+        else
+        {
+            _logger.LogInformation("Install of {App} on {Device} is already queued or running", request.AppId, request.DeviceId);
+        }
 
         return Task.CompletedTask;
     }

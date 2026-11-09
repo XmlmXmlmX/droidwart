@@ -41,7 +41,12 @@ public static class DiscoveryPayloads
             ["origin"] = Origin(),
         };
 
-        // Phase 3 only reports versions. The install command (command_topic) follows in phase 4.
+        // Apps with policy Notify get no install button.
+        if (app.Policy != UpdatePolicy.Notify)
+        {
+            config["command_topic"] = mqtt.InstallCommandTopic(device.Id, app.Id);
+            config["payload_install"] = MqttOptions.InstallPayload;
+        }
 
         return new MqttMessage(
             $"{mqtt.DiscoveryPrefix}/update/{node}/{Slug(app.Id)}/config",
@@ -79,7 +84,9 @@ public static class DiscoveryPayloads
     /// normalized versions and identical strings whenever it considers the app up to date.
     /// Otherwise "2026.11.1-full" vs. "2026.11.1" would show up as an update.
     /// </summary>
-    public static MqttMessage UpdateState(MqttOptions mqtt, string deviceId, AppInventoryEntry app)
+    public static MqttMessage UpdateState(
+        MqttOptions mqtt, string deviceId, AppInventoryEntry app,
+        bool inProgress = false, int? percentage = null, string? summary = null)
     {
         var update = app.Update;
         var installedRaw = app.Package?.VersionName;
@@ -114,9 +121,11 @@ public static class DiscoveryPayloads
             ["installed_version"] = installedVersion,
             ["latest_version"] = latestVersion,
             ["title"] = app.Name,
-            ["release_summary"] = ReleaseSummary(app),
+            ["release_summary"] = Shorten(summary) ?? ReleaseSummary(app),
             ["release_url"] = update.ReleaseUrl,
-            ["in_progress"] = false,
+            ["in_progress"] = inProgress,
+            // null resets a previous progress value in Home Assistant
+            ["update_percentage"] = inProgress ? percentage : null,
         };
 
         return new MqttMessage(mqtt.UpdateStateTopic(deviceId, app.AppId), state.ToJsonString());
@@ -129,6 +138,11 @@ public static class DiscoveryPayloads
                    ?? (app.Policy == UpdatePolicy.Notify ? "Update manually on the device (policy: Notify)." : null)
                    ?? app.Update.ReleaseNotes;
 
+        return Shorten(text);
+    }
+
+    private static string? Shorten(string? text)
+    {
         if (string.IsNullOrWhiteSpace(text))
         {
             return null;

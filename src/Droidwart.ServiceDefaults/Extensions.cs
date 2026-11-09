@@ -7,7 +7,7 @@ using OpenTelemetry.Trace;
 namespace Microsoft.Extensions.Hosting;
 
 /// <summary>
-/// Aspire defaults for Droidwart: OpenTelemetry (logs, metrics, traces) and resilience for HttpClients.
+/// Aspire defaults for Droidwart: OpenTelemetry (logs, metrics, traces).
 /// Adapted for a worker without HTTP endpoints (no ASP.NET Core dependency, no health endpoints).
 /// </summary>
 public static class Extensions
@@ -19,8 +19,8 @@ public static class Extensions
     {
         builder.ConfigureOpenTelemetry();
 
-        // Applies to the GitHub client from phase 2: retries, timeouts, circuit breaker
-        builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+        // No global resilience handler: its timeouts (10 s per attempt) would break long APK downloads.
+        // Clients opt in individually with AddStandardResilienceHandler().
 
         return builder;
     }
