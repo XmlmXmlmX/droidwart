@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json.Nodes;
 using Droidwart.Worker.Configuration;
+using Droidwart.Worker.Installs;
 using Droidwart.Worker.Inventory;
 using Droidwart.Worker.Updates;
 
@@ -76,6 +77,37 @@ public static class DiscoveryPayloads
 
         return new MqttMessage(
             $"{mqtt.DiscoveryPrefix}/binary_sensor/{node}/adb/config",
+            config.ToJsonString());
+    }
+
+    public static MqttMessage AppCommandConfig(
+        MqttOptions mqtt, DeviceOptions device, DeviceInfo? info, AppOptions app, AppCommand command)
+    {
+        var commandName = command switch
+        {
+            AppCommand.Start => "start",
+            AppCommand.Stop => "stop",
+            AppCommand.Restart => "restart",
+            _ => throw new ArgumentOutOfRangeException(nameof(command), command, "Expected a start, stop, or restart command."),
+        };
+
+        var node = NodeId(mqtt, device);
+        var uniqueId = $"{node}_{Slug(app.Id)}_{commandName}";
+        var config = new JsonObject
+        {
+            ["name"] = $"{command} {app.Name}",
+            ["unique_id"] = uniqueId,
+            ["default_entity_id"] = $"button.{uniqueId}",
+            ["command_topic"] = mqtt.AppCommandTopic(device.Id, app.Id, commandName),
+            ["payload_press"] = commandName,
+            ["availability"] = Availability(mqtt, device.Id),
+            ["availability_mode"] = "all",
+            ["device"] = Device(node, device, info),
+            ["origin"] = Origin(),
+        };
+
+        return new MqttMessage(
+            $"{mqtt.DiscoveryPrefix}/button/{node}/{Slug(app.Id)}_{commandName}/config",
             config.ToJsonString());
     }
 

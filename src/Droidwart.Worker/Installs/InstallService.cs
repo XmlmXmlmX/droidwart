@@ -11,8 +11,7 @@ using Microsoft.Extensions.Options;
 namespace Droidwart.Worker.Installs;
 
 /// <summary>
-/// Processes install requests one after another: download and verify the asset, stream it to the device,
-/// check the installed version, relaunch the app and report every step to Home Assistant.
+/// Processes install and app-control requests one after another so commands for an app cannot race an install.
 /// </summary>
 public sealed partial class InstallService(
     InstallQueue queue,
@@ -43,7 +42,8 @@ public sealed partial class InstallService(
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
-                logger.LogError(ex, "Unexpected error while installing {App} on {Device}", request.AppId, request.DeviceId);
+                logger.LogError(ex, "Unexpected error while processing {Command} for {App} on {Device}",
+                    request.Command, request.AppId, request.DeviceId);
             }
             finally
             {
@@ -60,20 +60,28 @@ public sealed partial class InstallService(
 
         if (device is null || app is null)
         {
-            logger.LogWarning("Ignoring install request for unknown device/app {Device}/{App}", request.DeviceId, request.AppId);
-            return;
-        }
-
-        if (app.Policy == UpdatePolicy.Notify)
-        {
-            logger.LogWarning("Ignoring install request for {App}: policy is Notify", app.Id);
+            logger.LogWarning("Ignoring {Command} request for unknown device/app {Device}/{App}",
+                request.Command, request.DeviceId, request.AppId);
             return;
         }
 
         var entry = store.Find(device.Id, app.Id);
         if (entry is null)
         {
-            logger.LogWarning("Ignoring install request for {App} on {Device}: no inventory yet", app.Id, device.Id);
+            logger.LogWarning("Ignoring {Command} request for {App} on {Device}: no inventory yet",
+                request.Command, app.Id, device.Id);
+            return;
+        }
+
+        if (request.Command != AppCommand.Install)
+        {
+            await ProcessAppCommandAsync(request.Command, device, app, entry, cancellationToken);
+            return;
+        }
+
+        if (app.Policy == UpdatePolicy.Notify)
+        {
+            logger.LogWarning("Ignoring install request for {App}: policy is Notify", app.Id);
             return;
         }
 
@@ -164,6 +172,52 @@ public sealed partial class InstallService(
 
             await progress.FlushAsync();
             await publisher.PublishAppStateAsync(device.Id, entry, cancellationToken, summary: $"Installation failed: {reason}");
+        }
+    }
+
+    private async Task ProcessAppCommandAsync(
+        AppCommand command, DeviceOptions device, AppOptions app, AppInventoryEntry entry, CancellationToken cancellationToken)
+    {
+        if (entry.Status != AppStatus.Installed || entry.Package is null)
+        {
+            logger.LogWarning("Ignoring {Command} for {App} on {Device}: app is not installed", command, app.Id, device.Id);
+            return;
+        }
+
+        var connection = await adb.EnsureConnectedAsync(device, cancellationToken);
+        if (connection.State != ConnectionState.Online)
+        {
+            logger.LogWarning("Ignoring {Command} for {App} on {Device}: device is not connected ({State})",
+                command, app.Id, device.Id, connection.State);
+            return;
+        }
+
+        var package = entry.VariantPackage;
+        logger.LogInformation("Executing {Command} for {App} on {Device}", command, app.Id, device.Id);
+
+        if (command is AppCommand.Stop or AppCommand.Restart)
+        {
+            await RunAppShellCommandAsync(device, $"am force-stop {package}", cancellationToken);
+        }
+
+        if (command is AppCommand.Start or AppCommand.Restart)
+        {
+            var launch = InstallService.IsValidLaunchComponent(entry.LaunchComponent)
+                ? $"am start -n {entry.LaunchComponent}"
+                : $"monkey -p {package} -c android.intent.category.LAUNCHER 1";
+            await RunAppShellCommandAsync(device, launch, cancellationToken);
+        }
+
+        logger.LogInformation("{Command} completed for {App} on {Device}", command, app.Id, device.Id);
+    }
+
+    private async Task RunAppShellCommandAsync(DeviceOptions device, string command, CancellationToken cancellationToken)
+    {
+        var result = await adb.ShellAsync(device, command, cancellationToken);
+        if (!result.Success)
+        {
+            throw new InvalidOperationException(
+                $"ADB command '{command}' failed (exit code {result.ExitCode?.ToString() ?? "unknown"}): {result.Output}");
         }
     }
 

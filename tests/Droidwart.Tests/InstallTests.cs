@@ -35,6 +35,7 @@ public class InstallTests
 
         Assert.True(queue.TryEnqueue(request));
         Assert.False(queue.TryEnqueue(request with { Source = "again" }));
+        Assert.False(queue.TryEnqueue(request with { Command = AppCommand.Start }));
         Assert.True(queue.TryEnqueue(request with { AppId = "obtainium" }));
 
         queue.Complete(request);

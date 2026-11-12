@@ -2,11 +2,19 @@ using System.Threading.Channels;
 
 namespace Droidwart.Worker.Installs;
 
-public sealed record InstallRequest(string DeviceId, string AppId, string Source);
+public enum AppCommand
+{
+    Install,
+    Start,
+    Stop,
+    Restart,
+}
+
+public sealed record InstallRequest(string DeviceId, string AppId, string Source, AppCommand Command = AppCommand.Install);
 
 /// <summary>
-/// Install requests (from Home Assistant, later also from the maintenance window).
-/// A request for the same device and app is only accepted once until it has been processed.
+/// App commands from Home Assistant. A request for the same device and app is only accepted once
+/// until it has been processed, serializing controls with installations.
 /// </summary>
 public sealed class InstallQueue
 {

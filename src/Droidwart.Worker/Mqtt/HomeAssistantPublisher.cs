@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Droidwart.Worker.Adb;
 using Droidwart.Worker.Configuration;
+using Droidwart.Worker.Installs;
 using Droidwart.Worker.Inventory;
 using Microsoft.Extensions.Options;
 
@@ -57,6 +58,9 @@ public sealed class HomeAssistantPublisher
                 foreach (var app in fleet.AppsFor(device))
                 {
                     count += await PublishAsync(DiscoveryPayloads.UpdateConfig(_options, device, info, app), cancellationToken);
+                    count += await PublishAsync(DiscoveryPayloads.AppCommandConfig(_options, device, info, app, AppCommand.Start), cancellationToken);
+                    count += await PublishAsync(DiscoveryPayloads.AppCommandConfig(_options, device, info, app, AppCommand.Stop), cancellationToken);
+                    count += await PublishAsync(DiscoveryPayloads.AppCommandConfig(_options, device, info, app, AppCommand.Restart), cancellationToken);
 
                     // Without a fresh inventory the last retained state stays in place.
                     if (deviceInventory?.Apps.FirstOrDefault(a => a.AppId == app.Id) is { } entry)

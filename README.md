@@ -1,10 +1,15 @@
 # Droidwart
 
-Self-hosted .NET worker that keeps rooted Android devices up to date via ADB. Tracks GitHub releases
-and exposes app updates as native Home Assistant update entities over MQTT. Built for old phones
-repurposed as CCTV cameras.
+Self-hosted .NET worker that manages Android apps via ADB. Tracks GitHub releases and exposes app
+updates and start/stop/restart buttons as native Home Assistant entities over MQTT. Built for old
+phones repurposed as CCTV cameras.
 
 Status: **Phase 4 – Install** (inventory, release check, Home Assistant update entities with install button, verified APK download and installation via ADB).
+
+For each configured app and device, Home Assistant also discovers **Start**, **Stop** and **Restart**
+buttons. Start launches the app's resolved activity (or its launcher activity as a fallback), Stop
+force-stops the app, and Restart performs both operations. App control is available for installed
+apps; commands for an uninstalled app or disconnected device are logged and ignored.
 
 ## Requirements
 

@@ -186,11 +186,11 @@ public sealed class MqttConnection : BackgroundService
 
             try
             {
-                await _client.SubscribeAsync(_options.InstallCommandFilter, MqttQualityOfServiceLevel.AtLeastOnce);
+                await _client.SubscribeAsync(_options.AppCommandFilter, MqttQualityOfServiceLevel.AtLeastOnce);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Subscribing to {Filter} failed; install commands will not work", _options.InstallCommandFilter);
+                _logger.LogWarning(ex, "Subscribing to {Filter} failed; app commands will not work", _options.AppCommandFilter);
             }
 
             if (Connected is { } handlers)
@@ -222,28 +222,38 @@ public sealed class MqttConnection : BackgroundService
             return Task.CompletedTask;
         }
 
-        // Expected: <base>/<device>/<app>/install with payload "install"
+        // Expected: <base>/<device>/<app>/<command>, with the payload matching the command.
         var parts = message.Topic.Split('/');
-        if (parts.Length != 4 || parts[0] != _options.BaseTopic || parts[3] != "install")
+        if (parts.Length != 4 || parts[0] != _options.BaseTopic)
         {
             return Task.CompletedTask;
         }
 
         var payload = message.ConvertPayloadToString();
-        if (payload != MqttOptions.InstallPayload)
+        var command = parts[3] switch
+        {
+            "install" when payload == MqttOptions.InstallPayload => AppCommand.Install,
+            "start" when payload == "start" => AppCommand.Start,
+            "stop" when payload == "stop" => AppCommand.Stop,
+            "restart" when payload == "restart" => AppCommand.Restart,
+            _ => (AppCommand?)null,
+        };
+
+        if (command is null)
         {
             _logger.LogWarning("Ignoring unexpected payload on {Topic}", message.Topic);
             return Task.CompletedTask;
         }
 
-        var request = new InstallRequest(parts[1], parts[2], "Home Assistant");
+        var request = new InstallRequest(parts[1], parts[2], "Home Assistant", command.Value);
         if (_installQueue.TryEnqueue(request))
         {
-            _logger.LogInformation("Install requested for {App} on {Device}", request.AppId, request.DeviceId);
+            _logger.LogInformation("{Command} requested for {App} on {Device}", request.Command, request.AppId, request.DeviceId);
         }
         else
         {
-            _logger.LogInformation("Install of {App} on {Device} is already queued or running", request.AppId, request.DeviceId);
+            _logger.LogInformation("{Command} for {App} on {Device} is already queued or running",
+                request.Command, request.AppId, request.DeviceId);
         }
 
         return Task.CompletedTask;

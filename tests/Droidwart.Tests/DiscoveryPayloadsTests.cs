@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Droidwart.Worker.Configuration;
+using Droidwart.Worker.Installs;
 using Droidwart.Worker.Inventory;
 using Droidwart.Worker.Mqtt;
 using Droidwart.Worker.Updates;
@@ -46,6 +47,22 @@ public class DiscoveryPayloadsTests
         var json = JsonNode.Parse(DiscoveryPayloads.UpdateConfig(Mqtt, Garden, Info, magisk).Payload)!;
 
         Assert.Null(json["command_topic"]);
+    }
+
+    [Theory]
+    [InlineData(AppCommand.Start, "start")]
+    [InlineData(AppCommand.Stop, "stop")]
+    [InlineData(AppCommand.Restart, "restart")]
+    public void AppCommandConfig_CreatesHomeAssistantButton(AppCommand command, string commandName)
+    {
+        var message = DiscoveryPayloads.AppCommandConfig(Mqtt, Garden, Info, HaCompanion, command);
+        var json = JsonNode.Parse(message.Payload)!;
+
+        Assert.Equal($"homeassistant/button/droidwart_android_ip_cam_garden/ha_companion_{commandName}/config", message.Topic);
+        Assert.Equal($"droidwart_android_ip_cam_garden_ha_companion_{commandName}", (string?)json["unique_id"]);
+        Assert.Equal($"button.droidwart_android_ip_cam_garden_ha_companion_{commandName}", (string?)json["default_entity_id"]);
+        Assert.Equal($"droidwart/android-ip-cam-garden/ha-companion/{commandName}", (string?)json["command_topic"]);
+        Assert.Equal(commandName, (string?)json["payload_press"]);
     }
 
     [Fact]
