@@ -104,7 +104,7 @@ public sealed class InventoryCollector(
         try
         {
             var warnings = new List<string>();
-            var info = await ReadDeviceInfoAsync(device, cancellationToken);
+            var info = await ReadDeviceInfoAsync(device, warnings, cancellationToken);
             var thirdParty = await ReadThirdPartyPackagesAsync(device, warnings, cancellationToken);
 
             var apps = new List<AppInventoryEntry>();
@@ -122,11 +122,13 @@ public sealed class InventoryCollector(
         }
     }
 
-    private async Task<DeviceInfo> ReadDeviceInfoAsync(DeviceOptions device, CancellationToken cancellationToken)
+    private async Task<DeviceInfo> ReadDeviceInfoAsync(
+        DeviceOptions device, List<string> warnings, CancellationToken cancellationToken)
     {
         var command = $"for p in {string.Join(' ', Properties)}; do echo \"$p=$(getprop $p)\"; done";
         var result = await adb.ShellAsync(device, command, cancellationToken);
         var props = AndroidParsers.ParseKeyValueLines(result.Output);
+        var (ipAddress, macAddress) = await ReadNetworkInfoAsync(device, warnings, cancellationToken);
 
         string Get(string key) => props.TryGetValue(key, out var value) ? value : "";
 
@@ -140,7 +142,27 @@ public sealed class InventoryCollector(
             Get("ro.build.version.release"),
             int.TryParse(Get("ro.build.version.sdk"), out var sdk) ? sdk : null,
             primaryAbi,
-            abiList.Length > 0 ? abiList : new[] { primaryAbi });
+            abiList.Length > 0 ? abiList : new[] { primaryAbi },
+            ipAddress,
+            macAddress);
+    }
+
+    private async Task<(string? IpAddress, string? MacAddress)> ReadNetworkInfoAsync(
+        DeviceOptions device, List<string> warnings, CancellationToken cancellationToken)
+    {
+        var addresses = await adb.ShellAsync(device, "ip -o -4 addr show scope global", cancellationToken);
+        if (!addresses.Success)
+        {
+            warnings.Add($"'ip -o -4 addr show scope global' failed (exit code {addresses.ExitCode?.ToString() ?? "unknown"}): {addresses.Output}");
+        }
+
+        var links = await adb.ShellAsync(device, "ip -o link show", cancellationToken);
+        if (!links.Success)
+        {
+            warnings.Add($"'ip -o link show' failed (exit code {links.ExitCode?.ToString() ?? "unknown"}): {links.Output}");
+        }
+
+        return AndroidParsers.ParseNetworkInfo(addresses.Output, links.Output);
     }
 
     private async Task<List<InstalledPackage>> ReadThirdPartyPackagesAsync(
@@ -203,9 +225,43 @@ public sealed class InventoryCollector(
         }
 
         var launch = app.LaunchComponent ?? await ResolveLaunchComponentAsync(device, found.PackageName, cancellationToken);
+        var isRunning = await ReadAppRunningAsync(device, found.PackageName, cancellationToken);
 
         return new AppInventoryEntry(app.Id, app.Name, app.Policy, effectiveVariant.Package, AppStatus.Installed,
-            found, launch, update, notes);
+            found, launch, update, notes, isRunning);
+    }
+
+    public async Task<bool?> ReadAppRunningAsync(DeviceOptions device, string package, CancellationToken cancellationToken)
+    {
+        ShellResult result;
+        try
+        {
+            result = await adb.ShellAsync(device, $"pidof {package}", cancellationToken);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Timed out reading app process state for {Package} on {Device}", package, device.Id);
+            return null;
+        }
+        catch (Exception ex) when (ex is AdbServerUnavailableException or InvalidOperationException)
+        {
+            logger.LogWarning(ex, "Could not read app process state for {Package} on {Device}", package, device.Id);
+            return null;
+        }
+
+        if (result.Success)
+        {
+            return !string.IsNullOrWhiteSpace(result.Output);
+        }
+
+        if (result.ExitCode == 1 && string.IsNullOrWhiteSpace(result.Output))
+        {
+            return false;
+        }
+
+        logger.LogWarning("Could not read app process state for {Package} on {Device}: exit code {ExitCode}, {Output}",
+            package, device.Id, result.ExitCode, result.Output);
+        return null;
     }
 
     private async Task<string?> ResolveLaunchComponentAsync(DeviceOptions device, string package, CancellationToken cancellationToken)

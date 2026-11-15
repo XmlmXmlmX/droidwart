@@ -97,6 +97,48 @@ public class AndroidParsersTests
     }
 
     [Fact]
+    public void ParseNetworkInfo_PrefersWifiAddressAndMac()
+    {
+        const string addresses = """
+            1: lo    inet 127.0.0.1/8 scope host lo
+            3: rmnet_data0    inet 10.12.0.2/24 scope global rmnet_data0
+            4: wlan0    inet 192.168.1.42/24 brd 192.168.1.255 scope global wlan0
+            """;
+        const string links = """
+            1: lo: <LOOPBACK,UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000 link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+            3: rmnet_data0: <UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000 link/ether 11:22:33:44:55:66 brd ff:ff:ff:ff:ff:ff
+            4: wlan0: <BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state UP group default qlen 1000 link/ether aa:bb:cc:dd:ee:ff brd ff:ff:ff:ff:ff:ff
+            """;
+
+        var (ipAddress, macAddress) = AndroidParsers.ParseNetworkInfo(addresses, links);
+
+        Assert.Equal("192.168.1.42", ipAddress);
+        Assert.Equal("aa:bb:cc:dd:ee:ff", macAddress);
+    }
+
+    [Fact]
+    public void ParseNetworkInfo_ReturnsNull_WhenThereIsNoGlobalIpv4Address()
+    {
+        var result = AndroidParsers.ParseNetworkInfo(
+            "1: lo    inet 127.0.0.1/8 scope host lo",
+            "1: lo: <LOOPBACK> link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00");
+
+        Assert.Null(result.IpAddress);
+        Assert.Null(result.MacAddress);
+    }
+
+    [Fact]
+    public void ParseNetworkInfo_StillReturnsWifiMac_WhenWifiHasNoIpv4Address()
+    {
+        var result = AndroidParsers.ParseNetworkInfo(
+            "1: lo    inet 127.0.0.1/8 scope host lo",
+            "2: wlan0: <BROADCAST,MULTICAST> link/ether aa:bb:cc:dd:ee:ff brd ff:ff:ff:ff:ff:ff");
+
+        Assert.Null(result.IpAddress);
+        Assert.Equal("aa:bb:cc:dd:ee:ff", result.MacAddress);
+    }
+
+    [Fact]
     public void ParseResolveActivity_ReturnsComponent()
     {
         const string output = "priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true\ncom.termux/.app.TermuxActivity\n";

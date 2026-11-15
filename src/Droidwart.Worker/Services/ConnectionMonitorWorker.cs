@@ -1,5 +1,6 @@
 using Droidwart.Worker.Adb;
 using Droidwart.Worker.Configuration;
+using Droidwart.Worker.Inventory;
 using Droidwart.Worker.Mqtt;
 using Microsoft.Extensions.Options;
 
@@ -13,6 +14,8 @@ public sealed class ConnectionMonitorWorker(
     IAdbGateway adb,
     IOptionsMonitor<FleetOptions> fleet,
     IOptions<ScheduleOptions> schedule,
+    InventoryStore store,
+    InventoryCollector inventory,
     HomeAssistantPublisher publisher,
     InventoryTrigger trigger,
     IConfiguration configuration,
@@ -55,6 +58,11 @@ public sealed class ConnectionMonitorWorker(
 
         await publisher.PublishAvailabilityAsync(device.Id, online, stoppingToken);
 
+        if (online)
+        {
+            await RefreshAppStatusesAsync(device, stoppingToken);
+        }
+
         if (known && online && !wasOnline)
         {
             logger.LogInformation("{Device} is back online, starting inventory", device.Id);
@@ -63,6 +71,36 @@ public sealed class ConnectionMonitorWorker(
         else if (known && !online && wasOnline)
         {
             logger.LogWarning("{Device} went offline", device.Id);
+        }
+    }
+
+    private async Task RefreshAppStatusesAsync(DeviceOptions device, CancellationToken stoppingToken)
+    {
+        var apps = store.Current?.Devices.FirstOrDefault(d => d.DeviceId == device.Id)?.Apps;
+        if (apps is null)
+        {
+            return;
+        }
+
+        foreach (var app in apps.Where(a => a.Status == AppStatus.Installed))
+        {
+            try
+            {
+                var isRunning = await inventory.ReadAppRunningAsync(device, app.VariantPackage, stoppingToken);
+                if (isRunning == app.IsRunning)
+                {
+                    continue;
+                }
+
+                var updated = app with { IsRunning = isRunning };
+                store.Replace(device.Id, updated);
+                await publisher.PublishAppStatusAsync(device.Id, updated, stoppingToken);
+            }
+            catch (Exception ex) when (ex is AdbServerUnavailableException or InvalidOperationException
+                                       || ex is OperationCanceledException && !stoppingToken.IsCancellationRequested)
+            {
+                logger.LogDebug(ex, "Could not refresh app status for {App} on {Device}", app.AppId, device.Id);
+            }
         }
     }
 }

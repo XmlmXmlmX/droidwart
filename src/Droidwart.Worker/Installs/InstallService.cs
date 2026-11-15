@@ -18,6 +18,7 @@ public sealed partial class InstallService(
     InventoryStore store,
     IOptionsMonitor<FleetOptions> fleet,
     IAdbGateway adb,
+    InventoryCollector inventory,
     ApkDownloader downloader,
     HomeAssistantPublisher publisher,
     InventoryTrigger trigger,
@@ -155,9 +156,11 @@ public sealed partial class InstallService(
                 Package = installed,
                 Update = update with { State = UpdateState.UpToDate, Problem = null },
                 Notes = [],
+                IsRunning = await inventory.ReadAppRunningAsync(device, entry.VariantPackage, cancellationToken),
             };
             store.Replace(device.Id, done);
             await publisher.PublishAppStateAsync(device.Id, done, cancellationToken);
+            await publisher.PublishAppStatusAsync(device.Id, done, cancellationToken);
 
             logger.LogInformation("Installed {App} {Version} on {Device}", app.Id, installed.VersionName, device.Id);
 
@@ -207,6 +210,13 @@ public sealed partial class InstallService(
                 : $"monkey -p {package} -c android.intent.category.LAUNCHER 1";
             await RunAppShellCommandAsync(device, launch, cancellationToken);
         }
+
+        var updated = entry with
+        {
+            IsRunning = await inventory.ReadAppRunningAsync(device, package, cancellationToken),
+        };
+        store.Replace(device.Id, updated);
+        await publisher.PublishAppStatusAsync(device.Id, updated, cancellationToken);
 
         logger.LogInformation("{Command} completed for {App} on {Device}", command, app.Id, device.Id);
     }

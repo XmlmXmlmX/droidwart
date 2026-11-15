@@ -31,10 +31,17 @@ public sealed class MqttOptions
 
     public string InstallCommandTopic(string deviceId, string appId) => $"{BaseTopic}/{deviceId}/{appId}/install";
 
-    public string AppCommandTopic(string deviceId, string appId, string command) => $"{BaseTopic}/{deviceId}/{appId}/{command}";
+    public string AppCommandTopic(string deviceId, string appId) => $"{BaseTopic}/{deviceId}/{appId}/command";
 
-    /// <summary>Subscription filter for all app commands.</summary>
-    public string AppCommandFilter => $"{BaseTopic}/+/+/+";
+    public string DeviceIpTopic(string deviceId) => $"{BaseTopic}/{deviceId}/telemetry/ip";
+
+    public string DeviceMacTopic(string deviceId) => $"{BaseTopic}/{deviceId}/telemetry/mac";
+
+    public string AppStatusTopic(string deviceId, string appId) => $"{BaseTopic}/{deviceId}/{appId}/status";
+
+    public string InstallCommandFilter => $"{BaseTopic}/+/+/install";
+
+    public string AppCommandFilter => $"{BaseTopic}/+/+/command";
 
     public const string InstallPayload = "install";
 }

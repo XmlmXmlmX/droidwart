@@ -80,6 +80,40 @@ public static class DiscoveryPayloads
             config.ToJsonString());
     }
 
+    public static MqttMessage DeviceTelemetryConfig(
+        MqttOptions mqtt, DeviceOptions device, DeviceInfo? info, bool macAddress)
+    {
+        var id = macAddress ? "mac_address" : "ip_address";
+        var name = macAddress ? "MAC address" : "IP address";
+        var topic = macAddress ? mqtt.DeviceMacTopic(device.Id) : mqtt.DeviceIpTopic(device.Id);
+        return TelemetrySensorConfig(mqtt, device, info, id, name, topic);
+    }
+
+    public static MqttMessage AppStatusConfig(
+        MqttOptions mqtt, DeviceOptions device, DeviceInfo? info, AppOptions app)
+    {
+        var appId = Slug(app.Id);
+        return TelemetrySensorConfig(
+            mqtt, device, info, $"{appId}_status", $"{app.Name} status", mqtt.AppStatusTopic(device.Id, app.Id));
+    }
+
+    public static MqttMessage DeviceTelemetryState(MqttOptions mqtt, string deviceId, DeviceInfo info, bool macAddress) =>
+        new(macAddress ? mqtt.DeviceMacTopic(deviceId) : mqtt.DeviceIpTopic(deviceId),
+            macAddress ? info.MacAddress ?? "" : info.IpAddress ?? "");
+
+    public static MqttMessage AppStatusState(MqttOptions mqtt, string deviceId, AppInventoryEntry app) =>
+        new(mqtt.AppStatusTopic(deviceId, app.AppId), AppStatusValue(app));
+
+    public static string AppStatusValue(AppInventoryEntry app) =>
+        app.Status != AppStatus.Installed
+            ? "not installed"
+            : app.IsRunning switch
+            {
+                true => "running",
+                false => "stopped",
+                null => "unknown",
+            };
+
     public static MqttMessage AppCommandConfig(
         MqttOptions mqtt, DeviceOptions device, DeviceInfo? info, AppOptions app, AppCommand command)
     {
@@ -98,7 +132,7 @@ public static class DiscoveryPayloads
             ["name"] = $"{command} {app.Name}",
             ["unique_id"] = uniqueId,
             ["default_entity_id"] = $"button.{uniqueId}",
-            ["command_topic"] = mqtt.AppCommandTopic(device.Id, app.Id, commandName),
+            ["command_topic"] = mqtt.AppCommandTopic(device.Id, app.Id),
             ["payload_press"] = commandName,
             ["availability"] = Availability(mqtt, device.Id),
             ["availability_mode"] = "all",
@@ -108,6 +142,29 @@ public static class DiscoveryPayloads
 
         return new MqttMessage(
             $"{mqtt.DiscoveryPrefix}/button/{node}/{Slug(app.Id)}_{commandName}/config",
+            config.ToJsonString());
+    }
+
+    private static MqttMessage TelemetrySensorConfig(
+        MqttOptions mqtt, DeviceOptions device, DeviceInfo? info, string id, string name, string stateTopic)
+    {
+        var node = NodeId(mqtt, device);
+        var uniqueId = $"{node}_{id}";
+        var config = new JsonObject
+        {
+            ["name"] = name,
+            ["unique_id"] = uniqueId,
+            ["default_entity_id"] = $"sensor.{uniqueId}",
+            ["state_topic"] = stateTopic,
+            ["entity_category"] = "diagnostic",
+            ["availability"] = Availability(mqtt, device.Id),
+            ["availability_mode"] = "all",
+            ["device"] = Device(node, device, info),
+            ["origin"] = Origin(),
+        };
+
+        return new MqttMessage(
+            $"{mqtt.DiscoveryPrefix}/sensor/{node}/{id}/config",
             config.ToJsonString());
     }
 

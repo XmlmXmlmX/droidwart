@@ -11,6 +11,11 @@ buttons. Start launches the app's resolved activity (or its launcher activity as
 force-stops the app, and Restart performs both operations. App control is available for installed
 apps; commands for an uninstalled app or disconnected device are logged and ignored.
 
+Droidwart also publishes the phone's global IPv4 address and Wi-Fi MAC address, plus a status sensor
+for each configured app (`running`, `stopped`, `not installed` or `unknown`). These values are
+refreshed with the regular inventory; app status is also polled at the connection-check interval
+and updated immediately after an app command.
+
 ## Requirements
 
 - .NET 11 SDK

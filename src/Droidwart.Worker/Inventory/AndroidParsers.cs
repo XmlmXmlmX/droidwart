@@ -17,6 +17,12 @@ public static partial class AndroidParsers
     [GeneratedRegex(@"^package:(\S+?)(?:\s+installer=(\S+))?\s*$")]
     private static partial Regex PmListLineRegex();
 
+    [GeneratedRegex(@"^\d+:\s+(\S+?)\s+inet\s+(\d{1,3}(?:\.\d{1,3}){3})/\d+\b")]
+    private static partial Regex Ipv4InterfaceRegex();
+
+    [GeneratedRegex(@"^\d+:\s+([^:@]+)(?:@[^:]+)?:.*\blink/ether\s+([0-9a-fA-F:]{17})\b")]
+    private static partial Regex MacInterfaceRegex();
+
     /// <summary>Lines in the format "key=value".</summary>
     public static Dictionary<string, string> ParseKeyValueLines(string output)
     {
@@ -103,6 +109,32 @@ public static partial class AndroidParsers
         SplitLines(output)
             .Select(l => l.Trim())
             .LastOrDefault(l => l.Contains('/') && !l.Contains('=') && !l.Contains(' '));
+
+    /// <summary>Returns the preferred global IPv4 address and the Wi-Fi MAC address when available.</summary>
+    public static (string? IpAddress, string? MacAddress) ParseNetworkInfo(string addresses, string links)
+    {
+        var macAddresses = SplitLines(links)
+            .Select(line => MacInterfaceRegex().Match(line.Trim()))
+            .Where(match => match.Success)
+            .ToDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value, StringComparer.Ordinal);
+
+        var interfaces = SplitLines(addresses)
+            .Select(line => Ipv4InterfaceRegex().Match(line.Trim()))
+            .Where(match => match.Success)
+            .Select(match => (Name: match.Groups[1].Value.Split('@')[0], Address: match.Groups[2].Value))
+            .Where(item => !item.Name.StartsWith("lo", StringComparison.Ordinal))
+            .ToList();
+
+        var wifiMacAddress = macAddresses.FirstOrDefault(pair => pair.Key.StartsWith("wlan", StringComparison.Ordinal)).Value;
+        var preferred = interfaces.FirstOrDefault(item => item.Name.StartsWith("wlan", StringComparison.Ordinal));
+        var selected = preferred == default ? interfaces.FirstOrDefault() : preferred;
+        if (selected == default)
+        {
+            return (null, wifiMacAddress);
+        }
+
+        return (selected.Address, wifiMacAddress ?? macAddresses.GetValueOrDefault(selected.Name));
+    }
 
     private static string[] SplitLines(string output) =>
         output.Replace("\r", "", StringComparison.Ordinal).Split('\n');

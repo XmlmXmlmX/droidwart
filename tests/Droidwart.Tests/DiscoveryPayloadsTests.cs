@@ -61,8 +61,51 @@ public class DiscoveryPayloadsTests
         Assert.Equal($"homeassistant/button/droidwart_android_ip_cam_garden/ha_companion_{commandName}/config", message.Topic);
         Assert.Equal($"droidwart_android_ip_cam_garden_ha_companion_{commandName}", (string?)json["unique_id"]);
         Assert.Equal($"button.droidwart_android_ip_cam_garden_ha_companion_{commandName}", (string?)json["default_entity_id"]);
-        Assert.Equal($"droidwart/android-ip-cam-garden/ha-companion/{commandName}", (string?)json["command_topic"]);
+        Assert.Equal("droidwart/android-ip-cam-garden/ha-companion/command", (string?)json["command_topic"]);
         Assert.Equal(commandName, (string?)json["payload_press"]);
+    }
+
+    [Fact]
+    public void DeviceTelemetryConfig_UsesStableDiscoveryAndStateTopics()
+    {
+        var config = DiscoveryPayloads.DeviceTelemetryConfig(Mqtt, Garden, Info, macAddress: true);
+        var state = DiscoveryPayloads.DeviceTelemetryState(Mqtt, Garden.Id, Info with { MacAddress = "aa:bb:cc:dd:ee:ff" }, macAddress: true);
+        var json = JsonNode.Parse(config.Payload)!;
+
+        Assert.Equal("homeassistant/sensor/droidwart_android_ip_cam_garden/mac_address/config", config.Topic);
+        Assert.Equal("sensor.droidwart_android_ip_cam_garden_mac_address", (string?)json["default_entity_id"]);
+        Assert.Equal("droidwart/android-ip-cam-garden/telemetry/mac", (string?)json["state_topic"]);
+        Assert.Equal("aa:bb:cc:dd:ee:ff", state.Payload);
+    }
+
+    [Fact]
+    public void AppStatusConfig_UsesStableDiscoveryAndStateTopics()
+    {
+        var config = DiscoveryPayloads.AppStatusConfig(Mqtt, Garden, Info, HaCompanion);
+        var json = JsonNode.Parse(config.Payload)!;
+
+        Assert.Equal("homeassistant/sensor/droidwart_android_ip_cam_garden/ha_companion_status/config", config.Topic);
+        Assert.Equal("sensor.droidwart_android_ip_cam_garden_ha_companion_status", (string?)json["default_entity_id"]);
+        Assert.Equal("droidwart/android-ip-cam-garden/ha-companion/status", (string?)json["state_topic"]);
+    }
+
+    [Theory]
+    [InlineData(AppStatus.Installed, true, "running")]
+    [InlineData(AppStatus.Installed, false, "stopped")]
+    [InlineData(AppStatus.Installed, null, "unknown")]
+    [InlineData(AppStatus.NotInstalled, null, "not installed")]
+    public void AppStatusState_ReportsInstalledAndRuntimeStatus(AppStatus status, bool? isRunning, string expected)
+    {
+        var entry = Entry("2026.11.1-full", Check(UpdateState.UpToDate, "2026.11.1")) with
+        {
+            Status = status,
+            IsRunning = isRunning,
+        };
+
+        var message = DiscoveryPayloads.AppStatusState(Mqtt, Garden.Id, entry);
+
+        Assert.Equal("droidwart/android-ip-cam-garden/ha-companion/status", message.Topic);
+        Assert.Equal(expected, message.Payload);
     }
 
     [Fact]

@@ -54,10 +54,24 @@ public sealed class HomeAssistantPublisher
                 var info = deviceInventory?.Info;
 
                 count += await PublishAsync(DiscoveryPayloads.ConnectivityConfig(_options, device, info), cancellationToken);
+                count += await PublishAsync(DiscoveryPayloads.DeviceTelemetryConfig(_options, device, info, macAddress: false), cancellationToken);
+                count += await PublishAsync(DiscoveryPayloads.DeviceTelemetryConfig(_options, device, info, macAddress: true), cancellationToken);
+
+                if (info is not null)
+                {
+                    count += await PublishAsync(DiscoveryPayloads.DeviceTelemetryState(_options, device.Id, info, macAddress: false), cancellationToken);
+                    count += await PublishAsync(DiscoveryPayloads.DeviceTelemetryState(_options, device.Id, info, macAddress: true), cancellationToken);
+                }
 
                 foreach (var app in fleet.AppsFor(device))
                 {
                     count += await PublishAsync(DiscoveryPayloads.UpdateConfig(_options, device, info, app), cancellationToken);
+                    count += await PublishAsync(DiscoveryPayloads.AppStatusConfig(_options, device, info, app), cancellationToken);
+                    if (deviceInventory?.Apps.FirstOrDefault(a => a.AppId == app.Id) is { } appEntry)
+                    {
+                        count += await PublishAsync(DiscoveryPayloads.AppStatusState(_options, device.Id, appEntry), cancellationToken);
+                    }
+
                     count += await PublishAsync(DiscoveryPayloads.AppCommandConfig(_options, device, info, app, AppCommand.Start), cancellationToken);
                     count += await PublishAsync(DiscoveryPayloads.AppCommandConfig(_options, device, info, app, AppCommand.Stop), cancellationToken);
                     count += await PublishAsync(DiscoveryPayloads.AppCommandConfig(_options, device, info, app, AppCommand.Restart), cancellationToken);
@@ -103,6 +117,11 @@ public sealed class HomeAssistantPublisher
         bool inProgress = false, int? percentage = null, string? summary = null)
     {
         await PublishAsync(DiscoveryPayloads.UpdateState(_options, deviceId, entry, inProgress, percentage, summary), cancellationToken);
+    }
+
+    public async Task PublishAppStatusAsync(string deviceId, AppInventoryEntry entry, CancellationToken cancellationToken)
+    {
+        await PublishAsync(DiscoveryPayloads.AppStatusState(_options, deviceId, entry), cancellationToken);
     }
 
     private async Task RepublishAsync(CancellationToken cancellationToken)

@@ -27,7 +27,9 @@ public sealed record DeviceInfo(
     string AndroidVersion,
     int? Sdk,
     string PrimaryAbi,
-    IReadOnlyList<string> SupportedAbis)
+    IReadOnlyList<string> SupportedAbis,
+    string? IpAddress = null,
+    string? MacAddress = null)
 {
     public bool Is64Bit => SupportedAbis.Contains("arm64-v8a") || SupportedAbis.Contains("x86_64");
 }
@@ -47,7 +49,8 @@ public sealed record AppInventoryEntry(
     PackageDetails? Package,
     string? LaunchComponent,
     UpdateCheck Update,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    bool? IsRunning = null);
 
 public sealed record PackageDetails(
     string PackageName,

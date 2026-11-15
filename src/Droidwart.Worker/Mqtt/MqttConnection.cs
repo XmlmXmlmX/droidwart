@@ -184,14 +184,8 @@ public sealed class MqttConnection : BackgroundService
         {
             await PublishAsync(_options.StatusTopic, Online, retain: true, CancellationToken.None);
 
-            try
-            {
-                await _client.SubscribeAsync(_options.AppCommandFilter, MqttQualityOfServiceLevel.AtLeastOnce);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Subscribing to {Filter} failed; app commands will not work", _options.AppCommandFilter);
-            }
+            await SubscribeAsync(_options.InstallCommandFilter);
+            await SubscribeAsync(_options.AppCommandFilter);
 
             if (Connected is { } handlers)
             {
@@ -212,6 +206,18 @@ public sealed class MqttConnection : BackgroundService
         return Task.CompletedTask;
     }
 
+    private async Task SubscribeAsync(string filter)
+    {
+        try
+        {
+            await _client.SubscribeAsync(filter, MqttQualityOfServiceLevel.AtLeastOnce);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Subscribing to {Filter} failed; matching commands will not work", filter);
+        }
+    }
+
     private Task OnMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs args)
     {
         var message = args.ApplicationMessage;
@@ -222,7 +228,7 @@ public sealed class MqttConnection : BackgroundService
             return Task.CompletedTask;
         }
 
-        // Expected: <base>/<device>/<app>/<command>, with the payload matching the command.
+        // Expected: <base>/<device>/<app>/install or /command.
         var parts = message.Topic.Split('/');
         if (parts.Length != 4 || parts[0] != _options.BaseTopic)
         {
@@ -230,12 +236,12 @@ public sealed class MqttConnection : BackgroundService
         }
 
         var payload = message.ConvertPayloadToString();
-        var command = parts[3] switch
+        AppCommand? command = (parts[3], payload) switch
         {
-            "install" when payload == MqttOptions.InstallPayload => AppCommand.Install,
-            "start" when payload == "start" => AppCommand.Start,
-            "stop" when payload == "stop" => AppCommand.Stop,
-            "restart" when payload == "restart" => AppCommand.Restart,
+            ("install", MqttOptions.InstallPayload) => AppCommand.Install,
+            ("command", "start") => AppCommand.Start,
+            ("command", "stop") => AppCommand.Stop,
+            ("command", "restart") => AppCommand.Restart,
             _ => (AppCommand?)null,
         };
 
