@@ -17,11 +17,17 @@ public static partial class AndroidParsers
     [GeneratedRegex(@"^package:(\S+?)(?:\s+installer=(\S+))?\s*$")]
     private static partial Regex PmListLineRegex();
 
-    [GeneratedRegex(@"^\d+:\s+(\S+?)\s+inet\s+(\d{1,3}(?:\.\d{1,3}){3})/\d+\b")]
-    private static partial Regex Ipv4InterfaceRegex();
+    [GeneratedRegex(@"^\d+:\s+([^:@\s]+)")]
+    private static partial Regex InterfaceNameRegex();
 
-    [GeneratedRegex(@"^\d+:\s+([^:@]+)(?:@[^:]+)?:.*\blink/ether\s+([0-9a-fA-F:]{17})\b")]
-    private static partial Regex MacInterfaceRegex();
+    [GeneratedRegex(@"\binet\s+(\d{1,3}(?:\.\d{1,3}){3})/\d+\b")]
+    private static partial Regex Ipv4AddressRegex();
+
+    [GeneratedRegex(@"\blink/ether\s+([0-9a-fA-F:]{17})\b")]
+    private static partial Regex EthernetAddressRegex();
+
+    [GeneratedRegex(@"\b([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})\b")]
+    private static partial Regex MacAddressRegex();
 
     /// <summary>Lines in the format "key=value".</summary>
     public static Dictionary<string, string> ParseKeyValueLines(string output)
@@ -113,17 +119,44 @@ public static partial class AndroidParsers
     /// <summary>Returns the preferred global IPv4 address and the Wi-Fi MAC address when available.</summary>
     public static (string? IpAddress, string? MacAddress) ParseNetworkInfo(string addresses, string links)
     {
-        var macAddresses = SplitLines(links)
-            .Select(line => MacInterfaceRegex().Match(line.Trim()))
-            .Where(match => match.Success)
-            .ToDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value, StringComparer.Ordinal);
+        var macAddresses = new Dictionary<string, string>(StringComparer.Ordinal);
+        string? currentInterface = null;
+        foreach (var line in SplitLines(links))
+        {
+            var text = line.Trim();
+            var interfaceMatch = InterfaceNameRegex().Match(text);
+            if (interfaceMatch.Success)
+            {
+                currentInterface = interfaceMatch.Groups[1].Value;
+            }
 
-        var interfaces = SplitLines(addresses)
-            .Select(line => Ipv4InterfaceRegex().Match(line.Trim()))
-            .Where(match => match.Success)
-            .Select(match => (Name: match.Groups[1].Value.Split('@')[0], Address: match.Groups[2].Value))
-            .Where(item => !item.Name.StartsWith("lo", StringComparison.Ordinal))
-            .ToList();
+            var addressMatch = EthernetAddressRegex().Match(text);
+            if (currentInterface is not null && addressMatch.Success)
+            {
+                macAddresses[currentInterface] = addressMatch.Groups[1].Value;
+            }
+        }
+
+        var interfaces = new List<(string Name, string Address)>();
+        currentInterface = null;
+        foreach (var line in SplitLines(addresses))
+        {
+            var text = line.Trim();
+            var interfaceMatch = InterfaceNameRegex().Match(text);
+            if (interfaceMatch.Success)
+            {
+                currentInterface = interfaceMatch.Groups[1].Value;
+            }
+
+            var addressMatch = Ipv4AddressRegex().Match(text);
+            if (currentInterface is not null
+                && text.Contains("scope global", StringComparison.Ordinal)
+                && addressMatch.Success
+                && !string.Equals(currentInterface, "lo", StringComparison.Ordinal))
+            {
+                interfaces.Add((currentInterface, addressMatch.Groups[1].Value));
+            }
+        }
 
         var wifiMacAddress = macAddresses.FirstOrDefault(pair => pair.Key.StartsWith("wlan", StringComparison.Ordinal)).Value;
         var preferred = interfaces.FirstOrDefault(item => item.Name.StartsWith("wlan", StringComparison.Ordinal));
@@ -134,6 +167,18 @@ public static partial class AndroidParsers
         }
 
         return (selected.Address, wifiMacAddress ?? macAddresses.GetValueOrDefault(selected.Name));
+    }
+
+    /// <summary>Checks the process-name column from Android's "ps -A" output.</summary>
+    public static bool IsPackageProcessRunning(string output, string packageName) =>
+        SplitLines(output)
+            .Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault())
+            .Any(name => name == packageName || name?.StartsWith($"{packageName}:", StringComparison.Ordinal) == true);
+
+    public static string? ParseMacAddress(string output)
+    {
+        var match = MacAddressRegex().Match(output);
+        return match.Success ? match.Groups[1].Value.ToLowerInvariant() : null;
     }
 
     private static string[] SplitLines(string output) =>

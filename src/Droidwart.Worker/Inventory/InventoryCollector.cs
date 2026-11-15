@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using Droidwart.Worker.Adb;
 using Droidwart.Worker.Configuration;
 using Droidwart.Worker.GitHub;
@@ -150,19 +152,48 @@ public sealed class InventoryCollector(
     private async Task<(string? IpAddress, string? MacAddress)> ReadNetworkInfoAsync(
         DeviceOptions device, List<string> warnings, CancellationToken cancellationToken)
     {
-        var addresses = await adb.ShellAsync(device, "ip -o -4 addr show scope global", cancellationToken);
+        var addresses = await adb.ShellAsync(device, "ip addr show", cancellationToken);
         if (!addresses.Success)
         {
-            warnings.Add($"'ip -o -4 addr show scope global' failed (exit code {addresses.ExitCode?.ToString() ?? "unknown"}): {addresses.Output}");
+            warnings.Add($"'ip addr show' failed (exit code {addresses.ExitCode?.ToString() ?? "unknown"}): {addresses.Output}");
         }
 
-        var links = await adb.ShellAsync(device, "ip -o link show", cancellationToken);
+        var links = await adb.ShellAsync(device, "ip link show", cancellationToken);
         if (!links.Success)
         {
-            warnings.Add($"'ip -o link show' failed (exit code {links.ExitCode?.ToString() ?? "unknown"}): {links.Output}");
+            warnings.Add($"'ip link show' failed (exit code {links.ExitCode?.ToString() ?? "unknown"}): {links.Output}");
         }
 
-        return AndroidParsers.ParseNetworkInfo(addresses.Output, links.Output);
+        var (ipAddress, parsedMacAddress) = AndroidParsers.ParseNetworkInfo(addresses.Output, links.Output);
+        var macAddress = parsedMacAddress;
+        if (macAddress is null)
+        {
+            var mac = await adb.ShellAsync(
+                device, "for file in /sys/class/net/wlan*/address; do [ -r \"$file\" ] && cat \"$file\"; done", cancellationToken);
+            if (mac.Success)
+            {
+                macAddress = AndroidParsers.ParseMacAddress(mac.Output);
+                if (macAddress is null)
+                {
+                    warnings.Add($"Could not parse a Wi-Fi MAC address from sysfs: {mac.Output}");
+                }
+            }
+            else
+            {
+                warnings.Add($"Could not read the Wi-Fi MAC address from sysfs (exit code {mac.ExitCode?.ToString() ?? "unknown"}): {mac.Output}");
+            }
+        }
+
+        var resolvedIpAddress = ipAddress;
+        if (resolvedIpAddress is null
+            && IPAddress.TryParse(device.Host, out var configuredAddress)
+            && configuredAddress.AddressFamily == AddressFamily.InterNetwork)
+        {
+            warnings.Add($"No global IPv4 address was found on the device; using its configured ADB host {configuredAddress}.");
+            resolvedIpAddress = configuredAddress.ToString();
+        }
+
+        return (resolvedIpAddress, macAddress);
     }
 
     private async Task<List<InstalledPackage>> ReadThirdPartyPackagesAsync(
@@ -233,10 +264,29 @@ public sealed class InventoryCollector(
 
     public async Task<bool?> ReadAppRunningAsync(DeviceOptions device, string package, CancellationToken cancellationToken)
     {
-        ShellResult result;
         try
         {
-            result = await adb.ShellAsync(device, $"pidof {package}", cancellationToken);
+            var result = await adb.ShellAsync(device, $"pidof {package}", cancellationToken);
+            if (result.Success)
+            {
+                return !string.IsNullOrWhiteSpace(result.Output);
+            }
+
+            if (result.ExitCode == 1 && string.IsNullOrWhiteSpace(result.Output))
+            {
+                return false;
+            }
+
+            var processes = await adb.ShellAsync(device, "ps -A", cancellationToken);
+            if (processes.Success && !string.IsNullOrWhiteSpace(processes.Output))
+            {
+                return AndroidParsers.IsPackageProcessRunning(processes.Output, package);
+            }
+
+            logger.LogWarning(
+                "Could not read app process state for {Package} on {Device}; pidof returned {PidOfExitCode} and ps returned {PsExitCode}: {Output}",
+                package, device.Id, result.ExitCode, processes.ExitCode, result.Output);
+            return null;
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
@@ -248,20 +298,6 @@ public sealed class InventoryCollector(
             logger.LogWarning(ex, "Could not read app process state for {Package} on {Device}", package, device.Id);
             return null;
         }
-
-        if (result.Success)
-        {
-            return !string.IsNullOrWhiteSpace(result.Output);
-        }
-
-        if (result.ExitCode == 1 && string.IsNullOrWhiteSpace(result.Output))
-        {
-            return false;
-        }
-
-        logger.LogWarning("Could not read app process state for {Package} on {Device}: exit code {ExitCode}, {Output}",
-            package, device.Id, result.ExitCode, result.Output);
-        return null;
     }
 
     private async Task<string?> ResolveLaunchComponentAsync(DeviceOptions device, string package, CancellationToken cancellationToken)

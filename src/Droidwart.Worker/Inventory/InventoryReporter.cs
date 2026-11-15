@@ -32,9 +32,10 @@ public sealed class InventoryReporter(IOptions<StorageOptions> storage, ILogger<
 
             if (device.Info is { } info)
             {
-                logger.LogInformation("  Device: {Manufacturer} {Model}, Android {Android} (SDK {Sdk}), ABI {Abi} [{Abis}], {Bits}",
+                logger.LogInformation("  Device: {Manufacturer} {Model}, Android {Android} (SDK {Sdk}), ABI {Abi} [{Abis}], {Bits}, IPv4 {IpAddress}, Wi-Fi MAC {MacAddress}",
                     info.Manufacturer, info.Model, info.AndroidVersion, info.Sdk, info.PrimaryAbi,
-                    string.Join(", ", info.SupportedAbis), info.Is64Bit ? "64-bit" : "32-bit");
+                    string.Join(", ", info.SupportedAbis), info.Is64Bit ? "64-bit" : "32-bit",
+                    info.IpAddress ?? "unknown", info.MacAddress ?? "unknown");
             }
 
             foreach (var warning in device.Warnings)
@@ -66,14 +67,23 @@ public sealed class InventoryReporter(IOptions<StorageOptions> storage, ILogger<
 
     private void LogApp(AppInventoryEntry app)
     {
+        var runtime = app.Status != AppStatus.Installed
+            ? "not installed"
+            : app.IsRunning switch
+            {
+                true => "running",
+                false => "stopped",
+                null => "unknown",
+            };
+
         if (app.Package is { } p)
         {
-            logger.LogInformation("  {App,-14} {Package,-44} {Version} ({Code}), source: {Installer}",
-                app.AppId, p.PackageName, p.VersionName, p.VersionCode, InstallerNames.Describe(p.Installer));
+            logger.LogInformation("  {App,-14} {Package,-44} {Version} ({Code}), source: {Installer}, process: {ProcessStatus}",
+                app.AppId, p.PackageName, p.VersionName, p.VersionCode, InstallerNames.Describe(p.Installer), runtime);
         }
         else
         {
-            logger.LogInformation("  {App,-14} {Package,-44} not installed", app.AppId, app.VariantPackage);
+            logger.LogInformation("  {App,-14} {Package,-44} {Status}", app.AppId, app.VariantPackage, runtime);
         }
 
         var update = app.Update;

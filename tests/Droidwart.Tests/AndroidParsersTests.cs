@@ -117,6 +117,33 @@ public class AndroidParsersTests
     }
 
     [Fact]
+    public void ParseNetworkInfo_ParsesStandardMultilineIpOutput()
+    {
+        const string addresses = """
+            1: lo: <LOOPBACK,UP> mtu 65536
+                inet 127.0.0.1/8 scope host lo
+            4: wlan0: <BROADCAST,MULTICAST,UP> mtu 1500
+                inet 192.168.1.42/24 brd 192.168.1.255 scope global wlan0
+            """;
+        const string links = """
+            4: wlan0: <BROADCAST,MULTICAST,UP> mtu 1500
+                link/ether aa:bb:cc:dd:ee:ff brd ff:ff:ff:ff:ff:ff
+            """;
+
+        var (ipAddress, macAddress) = AndroidParsers.ParseNetworkInfo(addresses, links);
+
+        Assert.Equal("192.168.1.42", ipAddress);
+        Assert.Equal("aa:bb:cc:dd:ee:ff", macAddress);
+    }
+
+    [Fact]
+    public void ParseMacAddress_ReadsAddressFromSysfsOutput()
+    {
+        Assert.Equal("aa:bb:cc:dd:ee:ff", AndroidParsers.ParseMacAddress("aa:BB:cc:DD:ee:FF\n"));
+        Assert.Null(AndroidParsers.ParseMacAddress("permission denied"));
+    }
+
+    [Fact]
     public void ParseNetworkInfo_ReturnsNull_WhenThereIsNoGlobalIpv4Address()
     {
         var result = AndroidParsers.ParseNetworkInfo(
@@ -137,6 +164,13 @@ public class AndroidParsersTests
         Assert.Null(result.IpAddress);
         Assert.Equal("aa:bb:cc:dd:ee:ff", result.MacAddress);
     }
+
+    [Theory]
+    [InlineData("USER PID PPID NAME\nu0_a1 123 1 com.example.app\n", "com.example.app", true)]
+    [InlineData("USER PID PPID NAME\nu0_a1 123 1 com.example.app:service\n", "com.example.app", true)]
+    [InlineData("USER PID PPID NAME\nu0_a1 123 1 com.example.app.extra\n", "com.example.app", false)]
+    public void IsPackageProcessRunning_MatchesExactPackageProcess(string processList, string packageName, bool expected) =>
+        Assert.Equal(expected, AndroidParsers.IsPackageProcessRunning(processList, packageName));
 
     [Fact]
     public void ParseResolveActivity_ReturnsComponent()
