@@ -26,6 +26,8 @@ jobs:
         run: docker build --file Dockerfile --tag droidwart:ci .
       - name: Build ADB server image
         run: docker build --file docker/adb-server/Dockerfile --tag droidwart-adb-server:ci docker/adb-server
+      - name: Build Droidwart admin image
+        run: docker build --file src/Droidwart.Admin/Dockerfile --tag droidwart-admin:ci src/Droidwart.Admin
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -75,6 +77,22 @@ jobs:
           push: true
           tags: ${{ steps.adb-meta.outputs.tags }}
           labels: ${{ steps.adb-meta.outputs.labels }}
+      - name: Extract Droidwart admin image metadata
+        id: admin-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/xmlmxmlmx/droidwart-admin
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+      - name: Build and push Droidwart admin image
+        uses: docker/build-push-action@v6
+        with:
+          context: src/Droidwart.Admin
+          file: src/Droidwart.Admin/Dockerfile
+          push: true
+          tags: ${{ steps.admin-meta.outputs.tags }}
+          labels: ${{ steps.admin-meta.outputs.labels }}
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -99,10 +117,12 @@ jobs:
 
             - [Droidwart](https://github.com/XmlmXmlmX/droidwart/pkgs/container/droidwart): `ghcr.io/xmlmxmlmx/droidwart:${{ steps.image-version.outputs.value }}`
             - [ADB server](https://github.com/XmlmXmlmX/droidwart/pkgs/container/droidwart-adb-server): `ghcr.io/xmlmxmlmx/droidwart-adb-server:${{ steps.image-version.outputs.value }}`
+            - [Droidwart admin](https://github.com/XmlmXmlmX/droidwart/pkgs/container/droidwart-admin): `ghcr.io/xmlmxmlmx/droidwart-admin:${{ steps.image-version.outputs.value }}`
 
             Pull them with:
 
             ```sh
             docker pull ghcr.io/xmlmxmlmx/droidwart:${{ steps.image-version.outputs.value }}
             docker pull ghcr.io/xmlmxmlmx/droidwart-adb-server:${{ steps.image-version.outputs.value }}
+            docker pull ghcr.io/xmlmxmlmx/droidwart-admin:${{ steps.image-version.outputs.value }}
             ```
