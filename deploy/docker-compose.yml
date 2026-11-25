@@ -30,6 +30,19 @@ services:
       - droidwart-data:/data
     restart: unless-stopped
 
+  droidwart-admin:
+    build:
+      context: ../src/Droidwart.Admin
+    image: ghcr.io/xmlmxmlmx/droidwart-admin:${DROIDWART_TAG:-edge}
+    depends_on: [adb-server]
+    environment:
+      - ADB_SERVER_HOST=adb-server
+      - ADB_SERVER_PORT=5037
+      - PORT=4173
+    ports:
+      - "127.0.0.1:4173:4173"
+    restart: unless-stopped
+
 volumes:
   adb-keys:
   droidwart-data:

@@ -1,0 +1,86 @@
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  color: #172033;
+  background: #eef2f7;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #bcc5d3;
+  border-radius: 6px;
+  background: white;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: #315efb;
+  border-color: #315efb;
+  color: white;
+}
+
+.admin {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.admin header,
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin header {
+  justify-content: space-between;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.grid article,
+.admin section:not(.grid) {
+  background: white;
+  border: 1px solid #dde3ec;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.grid article {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+canvas {
+  width: 100%;
+  max-height: 60vh;
+  border: 1px solid #ccd4e0;
+  border-radius: 6px;
+  background: #111827;
+}
+
+pre {
+  min-height: 80px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: #111827;
+  color: #dbeafe;
+  border-radius: 8px;
+  padding: 16px;
+}

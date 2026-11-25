@@ -58,6 +58,7 @@ Deployment as a Portainer stack: `deploy/docker-compose.yml`.
 - `src/Droidwart.Worker` – worker service (.NET 11)
 - `tests/Droidwart.Tests` – unit tests (xUnit v3)
 - `docker/adb-server` – ADB server image (Debian, adb, tini)
+- `src/Droidwart.Admin` – local TypeScript/Tango administration UI (devices, settings, APKs, Scrcpy)
 - `deploy/docker-compose.yml` – Portainer stack
 
 ## License

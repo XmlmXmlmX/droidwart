@@ -24,6 +24,12 @@ if (string.IsNullOrWhiteSpace(externalAdb))
         .WithEnvironment("Adb__ServerHost", $"{adbEndpoint.Property(EndpointProperty.Host)}")
         .WithEnvironment("Adb__ServerPort", $"{adbEndpoint.Property(EndpointProperty.Port)}")
         .WaitFor(adb);
+
+    builder.AddDockerfile("droidwart-admin", Path.Combine("..", "Droidwart.Admin"))
+        .WithHttpEndpoint(targetPort: 4173, name: "http")
+        .WithEnvironment("ADB_SERVER_HOST", $"{adbEndpoint.Property(EndpointProperty.Host)}")
+        .WithEnvironment("ADB_SERVER_PORT", $"{adbEndpoint.Property(EndpointProperty.Port)}")
+        .WaitFor(adb);
 }
 else
 {
@@ -31,6 +37,11 @@ else
     worker
         .WithEnvironment("Adb__ServerHost", parts[0])
         .WithEnvironment("Adb__ServerPort", parts.Length > 1 ? parts[1] : "5037");
+
+    builder.AddDockerfile("droidwart-admin", Path.Combine("..", "Droidwart.Admin"))
+        .WithHttpEndpoint(targetPort: 4173, name: "http")
+        .WithEnvironment("ADB_SERVER_HOST", parts[0])
+        .WithEnvironment("ADB_SERVER_PORT", parts.Length > 1 ? parts[1] : "5037");
 }
 
 // MQTT: only enabled if a broker is configured, e.g.
